@@ -1,0 +1,65 @@
+.document-actions:hover,
+.image-actions:hover {
+  opacity: 1 !important;
+}
+
+/* 카드 호버 시 우측 상단 액션 노출 (문서/이미지/PDF/전체보기 공통) */
+.group:hover .document-actions,
+.group:hover .image-actions,
+.group:hover .pdf-actions,
+.group:hover .file-actions {
+  opacity: 1 !important;
+}
+
+/* 카드 컨테이너 상대 위치 지정 (절대 위치 액션 버튼 기준점) */
+.document-card,
+.image-card,
+.pdf-card,
+.file-card {
+  position: relative;
+}
+
+/* 카드 강조 효과 (호버 시 살짝 상승 + 그림자 강화 + 경계 강조) */
+.document-card:hover,
+.image-card:hover,
+.pdf-card:hover,
+.file-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: var(--primary-color);
+}
+
+/* Image Viewer Styles */
+.image-tool-btn {
+  padding: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+}
+
+.image-tool-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.image-zoom-level,
+.image-rotation-angle {
+  min-width: 40px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  margin: 0 2px;
+}

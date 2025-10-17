@@ -100,11 +100,11 @@ const Clipboard: React.FC = () => {
       <textarea
         value={newText}
         onChange={(e) => setNewText(e.target.value)}
-        placeholder="Add text to clipboard..."
+        placeholder="클립보드에 텍스트 추가..."
         className="clipboard-input"
-        style={{ width: '100%', minHeight: '120px', resize: 'vertical' }}
+        style={{ width: '100%', minHeight: '200px', resize: 'vertical' }}
       />
-      <button onClick={addTextItem} className="btn" style={{ width: '100%', marginBottom: '16px' }}>Add Text</button>
+      <button onClick={addTextItem} className="btn" style={{ width: '100%', marginBottom: '16px' }}>텍스트 추가</button>
 
       {/* File upload for images */}
       <input
@@ -115,7 +115,7 @@ const Clipboard: React.FC = () => {
         id="imageUpload"
       />
       <label htmlFor="imageUpload" className="btn" style={{ width: '100%', marginBottom: '16px', display: 'block', textAlign: 'center' }}>
-        Add Image
+        이미지 추가
       </label>
 
       {/* Clipboard items */}
@@ -137,13 +137,13 @@ const Clipboard: React.FC = () => {
                 className="btn"
                 style={{ fontSize: '0.75rem', padding: '4px 8px' }}
               >
-                Copy
+                복사
               </button>
               <button
                 onClick={() => deleteItem(item.id)}
                 className="delete-btn"
               >
-                Delete
+                삭제
               </button>
             </div>
           </div>
