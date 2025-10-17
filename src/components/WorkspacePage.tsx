@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Folder, FileText, Grid, List, Plus, Search, Trash3, Pencil, X, Image, Upload, FileEarmarkPdf, ZoomOut, ZoomIn, ArrowClockwise, ArrowCounterclockwise, ArrowRepeat, Download, Fullscreen, FullscreenExit } from  'react-bootstrap-icons';
+import { Folder, FileText, Grid, List, Plus, Search, Trash3, Pencil, X, Image, Upload, FileEarmarkPdf, ZoomOut, ZoomIn, ArrowClockwise, ArrowCounterclockwise, ArrowRepeat, Download, Fullscreen, FullscreenExit, ChevronRight, ChevronDown } from  'react-bootstrap-icons';
 import toast, { Toaster } from 'react-hot-toast';
 import { getAllDocuments, deleteDocument, updateDocument, Document, getAllImages, saveImage, deleteImage, ImageFile, updateImage, PDFFile, savePdf, getAllPdfs, deletePdf, updatePdf } from '../utils/db';
 import PDFViewer from './PDFViewer';
@@ -14,13 +14,18 @@ interface WorkspacePageProps {
 
 const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'documents' | 'images' | 'pdfs'>('all');
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [documents, setDocuments] = useState<Document[]>([]);
   const [images, setImages] = useState<ImageFile[]>([]);
   const [pdfs, setPdfs] = useState<PDFFile[]>([]);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'tree'>('tree');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [draggedItem, setDraggedItem] = useState<any>(null);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
   const [renamingDocument, setRenamingDocument] = useState<Document | null>(null);
   const [renamingImage, setRenamingImage] = useState<ImageFile | null>(null);
   const [renamingPdf, setRenamingPdf] = useState<PDFFile | null>(null);
@@ -360,6 +365,107 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
   };
 
   const closeContextMenu = () => setContextMenu({ open: false, x: 0, y: 0 });
+
+  // 파일들을 폴더별로 그룹화하는 함수
+  const groupFilesByFolder = (files: any[]) => {
+    const folderMap = new Map<string, any[]>();
+
+    files.forEach(file => {
+      // 파일 이름에서 폴더 경로 추출 (없으면 'root'로 설정)
+      const folderPath = file.folder || 'root';
+      if (!folderMap.has(folderPath)) {
+        folderMap.set(folderPath, []);
+      }
+      folderMap.get(folderPath)!.push(file);
+    });
+
+    // expandedFolders에 있는 빈 폴더들도 추가
+    expandedFolders.forEach(folderPath => {
+      if (!folderMap.has(folderPath)) {
+        folderMap.set(folderPath, []);
+      }
+    });
+
+    return folderMap;
+  };
+
+  // 폴더 토글 함수
+  const toggleFolder = (folderPath: string) => {
+    const newExpanded = new Set(expandedFolders);
+    if (newExpanded.has(folderPath)) {
+      newExpanded.delete(folderPath);
+    } else {
+      newExpanded.add(folderPath);
+    }
+    setExpandedFolders(newExpanded);
+  };
+
+  // 드래그 앤 드롭 함수들
+  const handleDragStart = (e: React.DragEvent, item: any) => {
+    setDraggedItem(item);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, folderPath: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverFolder(folderPath);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // 폴더 영역을 벗어날 때만 dragOverFolder를 null로 설정
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverFolder(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetFolder: string) => {
+    e.preventDefault();
+    setDragOverFolder(null);
+
+    if (!draggedItem) return;
+
+    try {
+      // 아이템의 폴더 정보 업데이트
+      if (draggedItem.type === 'document') {
+        await updateDocument(draggedItem.id, { ...draggedItem, folder: targetFolder });
+        // 로컬 상태 업데이트
+        setDocuments(prev => prev.map(doc =>
+          doc.id === draggedItem.id ? { ...doc, folder: targetFolder } : doc
+        ));
+      } else if (draggedItem.type === 'image') {
+        await updateImage(draggedItem.id, { ...draggedItem, folder: targetFolder });
+        setImages(prev => prev.map(img =>
+          img.id === draggedItem.id ? { ...img, folder: targetFolder } : img
+        ));
+      } else if (draggedItem.type === 'pdf') {
+        await updatePdf(draggedItem.id, { ...draggedItem, folder: targetFolder });
+        setPdfs(prev => prev.map(pdf =>
+          pdf.id === draggedItem.id ? { ...pdf, folder: targetFolder } : pdf
+        ));
+      }
+
+      setDraggedItem(null);
+      toast.success('파일이 폴더로 이동되었습니다.');
+    } catch (error) {
+      console.error('파일 이동 실패:', error);
+      toast.error('파일 이동에 실패했습니다.');
+    }
+  };
+
+  // 새 폴더 만들기 함수
+  const handleCreateNewFolder = () => {
+    if (!newFolderName.trim()) return;
+
+    // expandedFolders에 새 폴더 추가
+    const newExpanded = new Set(expandedFolders);
+    newExpanded.add(newFolderName.trim());
+    setExpandedFolders(newExpanded);
+
+    setShowNewFolderModal(false);
+    setNewFolderName('');
+    toast.success(`새 폴더 "${newFolderName}"가 생성되었습니다.`);
+  };
 
   const openContextForItem = (e: React.MouseEvent, item: any) => {
     console.log('Right-click detected!', e);
@@ -957,6 +1063,44 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
               >
                 <List size={16} />
               </button>
+              <button
+                onClick={() => setViewMode('tree')}
+                style={{
+                padding: '8px',
+                background: viewMode === 'tree' ? 'var(--primary-color)' : 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                color: viewMode === 'tree' ? 'white' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                justifyContent: 'center'
+                }}
+              title="트리 보기"
+              >
+                <Folder size={16} />
+              </button>
+              {viewMode === 'tree' && (
+                <button
+                  onClick={() => setShowNewFolderModal(true)}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'var(--primary-color)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '0.875rem'
+                  }}
+                  title="새 폴더 만들기"
+                >
+                  <Plus size={14} />
+                  새 폴더
+                </button>
+              )}
           </div>
         </div>
 
@@ -1100,6 +1244,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
         {activeTab === 'all' && (
           <div>
             {viewMode === 'grid' ? (
+              /* 그리드 뷰 */
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredAndSortedAll.map((item) => (
                   <div
@@ -1120,9 +1265,11 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       else if (item.type === 'pdf') handlePdfView(item);
                     }}
                     onContextMenu={(e) => openContextForItem(e, item)}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, item)}
                   >
                     {/* File Icon */}
-          <div style={{
+                    <div style={{
                       padding: '24px',
                       display: 'flex',
                       justifyContent: 'center',
@@ -1138,7 +1285,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     {/* File Info */}
                     <div style={{ padding: '16px' }}>
                       <h3 style={{
-            fontSize: '0.875rem',
+                        fontSize: '0.875rem',
                         fontWeight: '600',
                         margin: '0 0 8px 0',
                         color: 'var(--text-primary)',
@@ -1151,7 +1298,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
 
                       <div style={{
                         fontSize: '0.75rem',
-            color: 'var(--text-secondary)',
+                        color: 'var(--text-secondary)',
                         marginBottom: '8px'
                       }}>
                         {item.type === 'document' ? formatFileSize(item.content) : `${(item.size / 1024).toFixed(1)} KB`}
@@ -1195,8 +1342,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           borderRadius: '4px',
                           color: 'var(--text-secondary)',
                           cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
+                          display: 'flex',
+                          alignItems: 'center',
                           justifyContent: 'center'
                         }}
                         title="이름 변경"
@@ -1231,7 +1378,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                   </div>
                 ))}
               </div>
-            ) : (
+            ) : viewMode === 'list' ? (
+              /* 리스트 뷰 */
               <div style={{
                 background: 'var(--bg-primary)',
                 borderRadius: 'var(--border-radius)',
@@ -1280,6 +1428,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                     onContextMenu={(e) => openContextForItem(e, item)}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, item)}
                   >
                     {/* Name */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1295,7 +1445,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                         }}>
                           {item.type === 'document' ? item.title : item.name}
                         </div>
-                        
                       </div>
                     </div>
 
@@ -1363,6 +1512,163 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                         <Trash3 size={14} />
                       </button>
                     </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* 트리 뷰 */
+              <div style={{
+                background: 'var(--bg-primary)',
+                borderRadius: 'var(--border-radius)',
+                border: '1px solid var(--border-color)',
+                overflow: 'hidden'
+              }}>
+                {Array.from(groupFilesByFolder(filteredAndSortedAll)).map(([folderPath, files]) => (
+                  <div key={folderPath}>
+                    {/* 폴더 헤더 */}
+                    <div
+                      onClick={() => toggleFolder(folderPath)}
+                      onDragOver={(e) => handleDragOver(e, folderPath)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, folderPath)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px 16px',
+                        background: dragOverFolder === folderPath ? 'var(--primary-color)' : 'var(--bg-secondary)',
+                        borderBottom: '1px solid var(--border-color)',
+                        cursor: 'pointer',
+                        transition: 'var(--transition)'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (dragOverFolder !== folderPath) {
+                          e.currentTarget.style.background = 'var(--bg-primary)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (dragOverFolder !== folderPath) {
+                          e.currentTarget.style.background = 'var(--bg-secondary)';
+                        }
+                      }}
+                    >
+                      {expandedFolders.has(folderPath) ? (
+                        <ChevronDown size={16} style={{ color: 'var(--text-secondary)', marginRight: '8px' }} />
+                      ) : (
+                        <ChevronRight size={16} style={{ color: 'var(--text-secondary)', marginRight: '8px' }} />
+                      )}
+                      <Folder size={18} style={{ color: '#fbbf24', marginRight: '8px' }} />
+                      <span style={{
+                        fontSize: '0.875rem',
+                        fontWeight: '500',
+                        color: dragOverFolder === folderPath ? 'white' : 'var(--text-primary)'
+                      }}>
+                        {folderPath === 'root' ? '루트 폴더' : folderPath} ({files.length})
+                      </span>
+                    </div>
+
+                    {/* 폴더 내용 */}
+                    {expandedFolders.has(folderPath) && (
+                      <div>
+                        {files.map((item) => (
+                          <div
+                            key={`${item.type}-${item.id}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '8px 16px 8px 48px',
+                              borderBottom: '1px solid var(--border-color)',
+                              cursor: 'pointer',
+                              transition: 'var(--transition)'
+                            }}
+                            onClick={() => {
+                              if (item.type === 'document') onDocumentSelect?.(item.id);
+                              else if (item.type === 'image') handleImageView(item);
+                              else if (item.type === 'pdf') handlePdfView(item);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            onContextMenu={(e) => openContextForItem(e, item)}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, item)}
+                          >
+                            {/* 파일 아이콘 */}
+                            <div style={{ marginRight: '12px' }}>
+                              {item.type === 'document' && <FileText size={16} style={{ color: 'var(--primary-color)' }} />}
+                              {item.type === 'image' && <Image size={16} style={{ color: '#10b981' }} />}
+                              {item.type === 'pdf' && <FileEarmarkPdf size={16} style={{ color: '#ef4444' }} />}
+                            </div>
+
+                            {/* 파일 정보 */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                color: 'var(--text-primary)',
+                                marginBottom: '2px'
+                              }}>
+                                {item.type === 'document' ? item.title : item.name}
+                              </div>
+                              <div style={{
+                                fontSize: '0.75rem',
+                                color: 'var(--text-secondary)'
+                              }}>
+                                {item.type === 'document' ? formatFileSize(item.content) : `${(item.size / 1024).toFixed(1)} KB`} •
+                                {new Date(item.type === 'document' ? item.updatedAt : item.createdAt).toLocaleString('ko-KR', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </div>
+                            </div>
+
+                            {/* 액션 버튼들 */}
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (item.type === 'document') handleRenameStart(item);
+                                  else if (item.type === 'image') handleRenameImageStart(item);
+                                  else if (item.type === 'pdf') handleRenamePdfStart(item);
+                                }}
+                                style={{
+                                  padding: '4px',
+                                  background: 'none',
+                                  border: 'none',
+                                  color: 'var(--text-secondary)',
+                                  cursor: 'pointer',
+                                  borderRadius: '4px'
+                                }}
+                                title="이름 변경"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (item.type === 'document') handleDelete(item.id);
+                                  else if (item.type === 'image') deleteImage(item.id);
+                                  else if (item.type === 'pdf') deletePdf(item.id);
+                                }}
+                                style={{
+                                  padding: '4px',
+                                  background: 'none',
+                                  border: 'none',
+                                  color: 'var(--text-secondary)',
+                                  cursor: 'pointer',
+                                  borderRadius: '4px'
+                                }}
+                                title="삭제"
+                                onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                              >
+                                <Trash3 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2224,6 +2530,22 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
         cancelText={'취소'}
         onConfirm={confirmDelete}
         onCancel={() => setConfirmState({ open: false })}
+      />
+
+      <RenameModal
+        title="새 폴더 만들기"
+        label="폴더 이름"
+        placeholder="폴더 이름을 입력하세요"
+        value={newFolderName}
+        confirmText="만들기"
+        cancelText="취소"
+        isOpen={showNewFolderModal}
+        onChange={setNewFolderName}
+        onConfirm={handleCreateNewFolder}
+        onCancel={() => {
+          setShowNewFolderModal(false);
+          setNewFolderName('');
+        }}
       />
 
       {contextMenu.open && (
