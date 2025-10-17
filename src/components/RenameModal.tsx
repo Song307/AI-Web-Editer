@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 interface RenameModalProps {
   title?: string;
@@ -25,6 +25,24 @@ const RenameModal: React.FC<RenameModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  // ESC 키와 Enter 키 이벤트 처리
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCancel();
+      } else if (e.key === 'Enter') {
+        onConfirm();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onCancel, onConfirm]);
+
   if (!isOpen) return null;
 
   return (

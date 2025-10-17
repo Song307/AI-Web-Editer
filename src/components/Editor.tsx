@@ -16,6 +16,7 @@ import { marked } from 'marked';
 import { saveDocument, getDocument, Document } from '../utils/db';
 import { researchTopic, analyzeText, generatePersonaFeedback, answerQuestion } from '../utils/ai';
 import toast from 'react-hot-toast';
+import RenameModal from './RenameModal';
 import { 
   TypeBold, 
   TypeItalic, 
@@ -79,6 +80,10 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [showImageUrlModal, setShowImageUrlModal] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
+  const [showLinkUrlModal, setShowLinkUrlModal] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [showPersonaModal, setShowPersonaModal] = useState(false);
+  const [persona, setPersona] = useState('');
 
   const editor = useEditor({
     extensions: [
@@ -790,20 +795,11 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
       return;
     }
 
-    const persona = prompt('페르소나를 입력하세요 (예: "경험 많은 편집자", "마케팅 전문가"):');
-    if (!persona) return;
-
+    // 선택된 텍스트 저장
     setSelectedTextForAI({ from, to, text: selectedText });
-    setIsAiLoading(true);
-    try {
-      const response = await generatePersonaFeedback(selectedText, persona);
-      setAiResponse(response);
-    } catch (error) {
-      console.error('AI feedback error:', error);
-      toast.error('AI 피드백에 실패했습니다. API 키가 유효한지 확인해주세요.');
-    } finally {
-      setIsAiLoading(false);
-    }
+    // 페르소나 입력 모달 열기
+    setPersona('');
+    setShowPersonaModal(true);
   };
 
   const handleAIAnswer = async () => {
@@ -856,23 +852,19 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
     setImageUrl('');
   };
 
-  const handleLinkInsert = () => {
-    if (!editor) return;
+  const handleLinkUrlConfirm = () => {
+    if (!editor || !linkUrl.trim()) return;
 
     // 선택된 텍스트 확인
     const { from, to } = editor.state.selection;
     const selectedText = editor.state.doc.textBetween(from, to);
 
-    // 링크 URL 입력 받기
-    const url = prompt('링크 URL을 입력하세요:');
-    if (!url) return;
-
     // 선택된 텍스트가 있으면 그 텍스트에 링크 적용, 없으면 URL을 텍스트로 사용
-    const linkText = selectedText || url;
+    const linkText = selectedText || linkUrl.trim();
 
     if (selectedText) {
       // 선택된 텍스트에 링크 적용
-      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+      editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl.trim() }).run();
     } else {
       // 새 텍스트 삽입 후 링크 적용
       editor.chain().focus().insertContent({
@@ -880,10 +872,54 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
         text: linkText,
         marks: [{
           type: 'link',
-          attrs: { href: url },
+          attrs: { href: linkUrl.trim() },
         }],
       }).run();
     }
+
+    // 모달 닫기 및 상태 초기화
+    setShowLinkUrlModal(false);
+    setLinkUrl('');
+  };
+
+  const handleLinkUrlCancel = () => {
+    setShowLinkUrlModal(false);
+    setLinkUrl('');
+  };
+
+  const handlePersonaConfirm = async () => {
+    if (!persona.trim() || !selectedTextForAI) return;
+
+    setIsAiLoading(true);
+    setShowPersonaModal(false);
+    
+    try {
+      const response = await generatePersonaFeedback(selectedTextForAI.text, persona.trim());
+      setAiResponse(response);
+    } catch (error) {
+      console.error('AI feedback error:', error);
+      toast.error('AI 피드백에 실패했습니다. API 키가 유효한지 확인해주세요.');
+    } finally {
+      setIsAiLoading(false);
+      setPersona('');
+    }
+  };
+
+  const handlePersonaCancel = () => {
+    setShowPersonaModal(false);
+    setPersona('');
+  };
+
+  const handleLinkInsert = () => {
+    if (!editor) return;
+
+    // 선택된 텍스트 확인
+    const { from, to } = editor.state.selection;
+    const selectedText = editor.state.doc.textBetween(from, to);
+
+    // 링크 모달 열기
+    setLinkUrl('');
+    setShowLinkUrlModal(true);
   };
 
   const copyAIResponse = () => {
@@ -1013,10 +1049,8 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
         </button>
         <button
           onClick={() => {
-            const url = prompt('이미지 URL을 입력하세요:');
-            if (url) {
-              editor.chain().focus().setImage({ src: url }).run();
-            }
+            setImageUrl('');
+            setShowImageUrlModal(true);
           }}
           className="btn"
           title="이미지 삽입"
@@ -1117,6 +1151,36 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
           </div>
         </div>
       )}
+      <RenameModal
+        title="이미지 URL 입력"
+        label="이미지 URL"
+        placeholder="https://example.com/image.jpg"
+        value={imageUrl}
+        isOpen={showImageUrlModal}
+        onChange={setImageUrl}
+        onConfirm={handleImageUrlConfirm}
+        onCancel={handleImageUrlCancel}
+      />
+      <RenameModal
+        title="링크 URL 입력"
+        label="링크 URL"
+        placeholder="https://example.com"
+        value={linkUrl}
+        isOpen={showLinkUrlModal}
+        onChange={setLinkUrl}
+        onConfirm={handleLinkUrlConfirm}
+        onCancel={handleLinkUrlCancel}
+      />
+      <RenameModal
+        title="페르소나 입력"
+        label="페르소나"
+        placeholder='예: "경험 많은 편집자", "마케팅 전문가"'
+        value={persona}
+        isOpen={showPersonaModal}
+        onChange={setPersona}
+        onConfirm={handlePersonaConfirm}
+        onCancel={handlePersonaCancel}
+      />
     </div>
   );
 });
