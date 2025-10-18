@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Folder, FileText, Grid, List, Plus, Search, Trash3, Pencil, X, Image, Upload, FileEarmarkPdf, ChevronRight, ChevronDown } from  'react-bootstrap-icons';
+import { Folder, FileText, Grid, List, Plus, Search, Trash3, Pencil, X, Image, Upload, FileEarmarkPdf, ChevronRight, ChevronDown, PlayCircle } from  'react-bootstrap-icons';
 import toast, { Toaster } from 'react-hot-toast';
-import { getAllDocuments, deleteDocument, updateDocument, Document, getAllImages, saveImage, deleteImage, ImageFile, updateImage, PDFFile, savePdf, getAllPdfs, deletePdf, updatePdf } from '../utils/db';
+import { getAllDocuments, deleteDocument, updateDocument, Document, getAllImages, saveImage, deleteImage, ImageFile, updateImage, PDFFile, savePdf, getAllPdfs, deletePdf, updatePdf, VideoFile, saveVideo, getAllVideos, deleteVideo, updateVideo } from '../utils/db';
 import PDFViewer from './PDFViewer';
 import ImageViewer from './tools/ImageViewer';
+import VideoPlayer from './VideoPlayer';
 import RenameModal from './RenameModal';
 import ConfirmModal from './ConfirmModal';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
@@ -14,11 +15,12 @@ interface WorkspacePageProps {
 }
 
 const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
-  const [activeTab, setActiveTab] = useState<'all' | 'documents' | 'images' | 'pdfs'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'documents' | 'images' | 'pdfs' | 'videos'>('all');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [documents, setDocuments] = useState<Document[]>([]);
   const [images, setImages] = useState<ImageFile[]>([]);
   const [pdfs, setPdfs] = useState<PDFFile[]>([]);
+  const [videos, setVideos] = useState<VideoFile[]>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'tree'>('tree');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
@@ -30,10 +32,12 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
   const [renamingDocument, setRenamingDocument] = useState<Document | null>(null);
   const [renamingImage, setRenamingImage] = useState<ImageFile | null>(null);
   const [renamingPdf, setRenamingPdf] = useState<PDFFile | null>(null);
+  const [renamingVideo, setRenamingVideo] = useState<VideoFile | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [selectedImage, setSelectedImage] = useState<ImageFile | null>(null);
-  const [selectedPdf, setSelectedPdf] = useState<ImageFile | null>(null);
-  const [confirmState, setConfirmState] = useState<{ open: boolean; id?: string }>({ open: false });
+  const [selectedPdf, setSelectedPdf] = useState<PDFFile | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
+  const [confirmState, setConfirmState] = useState<{ open: boolean; id?: string; type?: 'document' | 'image' | 'pdf' | 'video' }>({ open: false });
   const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; target?: any }>({ open: false, x: 0, y: 0 });
 
   // 이미지 뷰어 닫을 때 상태 초기화
@@ -41,10 +45,16 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
     setSelectedImage(null);
   };
 
+  // 동영상 뷰어 닫을 때 상태 초기화
+  const closeVideoViewer = () => {
+    setSelectedVideo(null);
+  };
+
   useEffect(() => {
     loadDocuments();
     loadImages();
     loadPdfs();
+    loadVideos();
   }, []);
 
   const loadDocuments = async () => {
@@ -79,19 +89,50 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    setConfirmState({ open: true, id });
+  const loadVideos = async () => {
+    try {
+      const videoFiles = await getAllVideos();
+      console.log('Loaded videos:', videoFiles.length, videoFiles);
+      setVideos(videoFiles);
+    } catch (error) {
+      console.error('Failed to load videos:', error);
+      toast.error('동영상을 불러오는데 실패했습니다.');
+    }
+  };
+
+  const handleDelete = async (id: string, type: 'document' | 'image' | 'pdf' | 'video' = 'document') => {
+    setConfirmState({ open: true, id, type });
   };
 
   const confirmDelete = async () => {
-    if (!confirmState.id) return setConfirmState({ open: false });
+    if (!confirmState.id || !confirmState.type) return setConfirmState({ open: false });
+    
     try {
-      await deleteDocument(confirmState.id);
-      setDocuments(documents.filter(doc => doc.id !== confirmState.id));
-        toast.success('문서가 삭제되었습니다.');
-      } catch (error) {
-        console.error('Failed to delete document:', error);
-        toast.error('문서 삭제에 실패했습니다.');
+      switch (confirmState.type) {
+        case 'document':
+          await deleteDocument(confirmState.id);
+          setDocuments(documents.filter(doc => doc.id !== confirmState.id));
+          toast.success('문서가 삭제되었습니다.');
+          break;
+        case 'image':
+          await deleteImage(confirmState.id);
+          setImages(images.filter(img => img.id !== confirmState.id));
+          toast.success('이미지가 삭제되었습니다.');
+          break;
+        case 'pdf':
+          await deletePdf(confirmState.id);
+          setPdfs(pdfs.filter(pdf => pdf.id !== confirmState.id));
+          toast.success('PDF가 삭제되었습니다.');
+          break;
+        case 'video':
+          await deleteVideo(confirmState.id);
+          setVideos(videos.filter(video => video.id !== confirmState.id));
+          toast.success('동영상이 삭제되었습니다.');
+          break;
+      }
+    } catch (error) {
+      console.error('Failed to delete file:', error);
+      toast.error('파일 삭제에 실패했습니다.');
     } finally {
       setConfirmState({ open: false });
     }
@@ -132,6 +173,50 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
         toast.success(`${file.name}이(가) 업로드되었습니다.`);
       } catch (error) {
         console.error('Failed to save image:', error);
+        toast.error(`${file.name} 업로드에 실패했습니다.`);
+      }
+    }
+
+    // input 초기화
+    event.target.value = '';
+  };
+
+  const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // 동영상 파일만 허용
+      if (!file.type.startsWith('video/')) {
+        toast.error(`${file.name}은(는) 동영상 파일이 아닙니다.`);
+        continue;
+      }
+
+      // 파일 크기 제한 (100MB)
+      if (file.size > 100 * 1024 * 1024) {
+        toast.error(`${file.name}의 크기가 너무 큽니다. (최대 100MB)`);
+        continue;
+      }
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        console.log('Video file uploaded:', file.name, 'Size:', file.size, 'Type:', file.type);
+        const videoData: VideoFile = {
+          id: `video_${Date.now()}_${i}`,
+          name: file.name,
+          data: arrayBuffer,
+          type: file.type,
+          size: file.size,
+          createdAt: new Date()
+        };
+
+        await saveVideo(videoData);
+        setVideos(prev => [...prev, videoData]);
+        toast.success(`${file.name}이(가) 업로드되었습니다.`);
+      } catch (error) {
+        console.error('Failed to save video:', error);
         toast.error(`${file.name} 업로드에 실패했습니다.`);
       }
     }
@@ -215,12 +300,33 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
     }
   };
 
+  const handleVideoDelete = async (id: string) => {
+    if (window.confirm('정말로 이 동영상을 삭제하시겠습니까?')) {
+      try {
+        await deleteVideo(id);
+        setVideos(videos.filter(video => video.id !== id));
+        if (selectedVideo?.id === id) {
+          setSelectedVideo(null);
+        }
+        toast.success('동영상이 삭제되었습니다.');
+      } catch (error) {
+        console.error('Failed to delete video:', error);
+        toast.error('동영상 삭제에 실패했습니다.');
+      }
+    }
+  };
+
   const handleImageView = (image: ImageFile) => {
     setSelectedImage(image);
   };
 
-  const handlePdfView = (pdf: ImageFile) => {
+  const handlePdfView = (pdf: PDFFile) => {
     setSelectedPdf(pdf);
+  };
+
+  const handleVideoView = (video: VideoFile) => {
+    console.log('Opening video viewer for:', video.name, 'Data size:', video.data.byteLength);
+    setSelectedVideo(video);
   };
 
   const closeContextMenu = () => setContextMenu({ open: false, x: 0, y: 0 });
@@ -451,6 +557,36 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
     }
   };
 
+  // 동영상 이름 변경 함수들
+  const handleRenameVideoStart = (video: VideoFile) => {
+    setRenamingVideo(video);
+    setNewTitle(video.name);
+  };
+
+  const handleRenameVideoCancel = () => {
+    setRenamingVideo(null);
+    setNewTitle('');
+  };
+
+  const handleRenameVideoConfirm = async () => {
+    if (!renamingVideo || !newTitle.trim()) return;
+
+    try {
+      await updateVideo(renamingVideo.id, { name: newTitle.trim() });
+      setVideos(videos.map(video => 
+        video.id === renamingVideo.id 
+          ? { ...video, name: newTitle.trim() }
+          : video
+      ));
+      setRenamingVideo(null);
+      setNewTitle('');
+      toast.success('동영상 이름이 변경되었습니다.');
+    } catch (error) {
+      console.error('Failed to rename video:', error);
+      toast.error('동영상 이름 변경에 실패했습니다.');
+    }
+  };
+
   const filteredAndSortedDocuments = documents
     .filter(doc =>
       doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -542,11 +678,42 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
       return 0;
     });
 
+  const filteredAndSortedVideos = videos
+    .filter(video =>
+      video.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      let aValue: string | number | Date;
+      let bValue: string | number | Date;
+
+      switch (sortBy) {
+        case 'name':
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        case 'date':
+          aValue = new Date(a.createdAt);
+          bValue = new Date(b.createdAt);
+          break;
+        case 'size':
+          aValue = a.size;
+          bValue = b.size;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
   // 전체보기 탭을 위한 통합 필터링
   const filteredAndSortedAll = [
     ...filteredAndSortedDocuments.map(doc => ({ ...doc, type: 'document' as const })),
     ...filteredAndSortedImages.map(img => ({ ...img, type: 'image' as const })),
-    ...filteredAndSortedPdfs.map(pdf => ({ ...pdf, type: 'pdf' as const }))
+    ...filteredAndSortedPdfs.map(pdf => ({ ...pdf, type: 'pdf' as const })),
+    ...filteredAndSortedVideos.map(video => ({ ...video, type: 'video' as const }))
   ].sort((a, b) => {
     let aValue: string | number | Date;
     let bValue: string | number | Date;
@@ -850,6 +1017,16 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
           >
             PDF
           </button>
+          <button
+            onClick={() => setActiveTab('videos')}
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+              activeTab === 'videos'
+                ? 'bg-blue-600 text-white'
+                : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            동영상
+          </button>
         </div>
 
         {/* Search and Sort Controls */}
@@ -900,6 +1077,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       if (item.type === 'document') onDocumentSelect?.(item.id);
                       else if (item.type === 'image') handleImageView(item);
                       else if (item.type === 'pdf') handlePdfView(item);
+                      else if (item.type === 'video') handleVideoView(item);
                     }}
                     onContextMenu={(e) => openContextForItem(e, item)}
                     draggable
@@ -910,6 +1088,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       {item.type === 'document' && <FileText size={48} className="text-blue-600" />}
                       {item.type === 'image' && <Image size={48} className="text-emerald-600" />}
                       {item.type === 'pdf' && <FileEarmarkPdf size={48} className="text-red-500" />}
+                      {item.type === 'video' && <PlayCircle size={48} className="text-purple-600" />}
                     </div>
 
                     {/* File Info */}
@@ -1158,6 +1337,21 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
 
         {activeTab === 'images' && (
           <div>
+            {/* Upload Button */}
+            <div className="mb-6">
+              <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md cursor-pointer hover:bg-blue-700 transition-colors">
+                <Upload size={16} />
+                이미지 업로드
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
             {(viewMode === 'grid' || viewMode === 'tree') ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredAndSortedImages.map((img) => (
@@ -1344,8 +1538,201 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
           </div>
         )}
 
+        {activeTab === 'videos' && (
+          <div>
+            {/* Upload Button */}
+            <div className="mb-6">
+              <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md cursor-pointer hover:bg-blue-700 transition-colors">
+                <Upload size={16} />
+                동영상 업로드
+                <input
+                  type="file"
+                  multiple
+                  accept="video/*"
+                  onChange={handleVideoUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {(viewMode === 'grid' || viewMode === 'tree') ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredAndSortedVideos.map((video) => (
+                  <div
+                    key={video.id}
+                    className="video-card group bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-200 cursor-pointer hover:shadow-lg"
+                    onClick={() => handleVideoView(video)}
+                    onContextMenu={(e) => openContextForItem(e, video)}
+                  >
+                    {/* Video Preview */}
+                    <div className="h-48 flex justify-center items-center bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 overflow-hidden">
+                      <PlayCircle size={48} className="text-purple-600" />
+                    </div>
+
+                    {/* Video Info */}
+                    <div className="p-4">
+                      <h3 className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100 overflow-hidden text-ellipsis whitespace-nowrap">
+                        {video.name}
+                      </h3>
+
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                        {(video.size / (1024 * 1024)).toFixed(1)} MB
+                      </div>
+
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        {new Date(video.createdAt).toLocaleString('ko-KR', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Hover Actions */}
+                    <div className="video-actions" style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      display: 'flex',
+                      gap: '4px',
+                      opacity: 0,
+                      transition: 'opacity 0.2s ease'
+                    }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRenameVideoStart(video);
+                        }}
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-blue-500 transition-colors"
+                        title="이름 변경"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleVideoDelete(video.id);
+                        }}
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-red-500 transition-colors"
+                        title="삭제"
+                      >
+                        <Trash3 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{
+                background: 'var(--bg-primary)',
+                borderRadius: 'var(--border-radius)',
+                border: '1px solid var(--border-color)',
+                overflow: 'hidden'
+              }}>
+                {/* List Header */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 120px 120px 80px',
+                  gap: '16px',
+                  padding: '12px 20px',
+                  background: 'var(--bg-secondary)',
+                  borderBottom: '1px solid var(--border-color)',
+                  fontSize: '0.75rem',
+                  fontWeight: '600',
+                  color: 'var(--text-secondary)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  <div>이름</div>
+                  <div>크기</div>
+                  <div>생성일</div>
+                  <div>작업</div>
+                </div>
+
+                {/* List Items */}
+                {filteredAndSortedVideos.map((video) => (
+                  <div
+                    key={video.id}
+                    className="grid grid-cols-[1fr_120px_120px_80px] gap-4 p-4 px-5 border-b border-gray-300 dark:border-gray-600 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors items-center"
+                    onClick={() => handleVideoView(video)}
+                    onContextMenu={(e) => openContextForItem(e, video)}
+                  >
+                    {/* Name */}
+                    <div className="flex items-center gap-3">
+                      <PlayCircle size={20} className="text-purple-500" />
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {video.name}
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">
+                          동영상
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Size */}
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      {(video.size / (1024 * 1024)).toFixed(1)} MB
+                    </div>
+
+                    {/* Date */}
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      {new Date(video.createdAt).toLocaleString('ko-KR', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRenameVideoStart(video);
+                        }}
+                        className="p-1 text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-blue-500 transition-colors"
+                        title="이름 변경"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleVideoDelete(video.id);
+                        }}
+                        className="p-1 text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-red-500 transition-colors"
+                        title="삭제"
+                      >
+                        <Trash3 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'pdfs' && (
           <div>
+            {/* Upload Button */}
+            <div className="mb-6">
+              <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md cursor-pointer hover:bg-blue-700 transition-colors">
+                <Upload size={16} />
+                PDF 업로드
+                <input
+                  type="file"
+                  multiple
+                  accept="application/pdf"
+                  onChange={handlePdfUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
             {(viewMode === 'grid' || viewMode === 'tree') ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredAndSortedPdfs.map((pdf) => (
@@ -1515,6 +1902,59 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
         onClose={closeImageViewer}
       />
 
+      {/* Video Player Modal */}
+      {selectedVideo && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            position: 'relative',
+            maxWidth: '90vw',
+            maxHeight: '90vh',
+            background: 'white',
+            borderRadius: '8px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              zIndex: 1001
+            }}>
+              <button
+                onClick={closeVideoViewer}
+                style={{
+                  background: 'rgba(0, 0, 0, 0.5)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '30px',
+                  height: '30px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <VideoPlayer
+              video={selectedVideo}
+            />
+          </div>
+        </div>
+      )}
+
       {/* PDF Viewer Modal */}
       {selectedPdf && (
         <div style={{
@@ -1579,6 +2019,118 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                 fileName={selectedPdf.name}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Viewer Modal */}
+      {selectedImage && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            position: 'relative',
+            maxWidth: '90vw',
+            maxHeight: '90vh',
+            background: 'white',
+            borderRadius: '8px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              zIndex: 1001
+            }}>
+              <button
+                onClick={closeImageViewer}
+                style={{
+                  background: 'rgba(0, 0, 0, 0.5)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '30px',
+                  height: '30px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <img
+              src={URL.createObjectURL(new Blob([selectedImage.data], { type: selectedImage.type }))}
+              alt={selectedImage.name}
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain'
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Video Player Modal */}
+      {selectedVideo && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            position: 'relative',
+            maxWidth: '90vw',
+            maxHeight: '90vh',
+            background: 'white',
+            borderRadius: '8px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              zIndex: 1001
+            }}>
+              <button
+                onClick={closeVideoViewer}
+                style={{
+                  background: 'rgba(0, 0, 0, 0.5)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '30px',
+                  height: '30px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <VideoPlayer
+              video={selectedVideo}
+            />
           </div>
         </div>
       )}

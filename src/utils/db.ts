@@ -26,11 +26,21 @@ export interface PDFFile {
   createdAt: Date;
 }
 
+export interface VideoFile {
+  id: string;
+  name: string;
+  data: ArrayBuffer; // 동영상 바이너리 데이터
+  type: string; // MIME 타입 (video/mp4, video/webm 등)
+  size: number; // 파일 크기 (bytes)
+  createdAt: Date;
+}
+
 const DB_NAME = 'AITextEditorDB';
-const DB_VERSION = 3; // 버전 업그레이드 (PDF 저장소 추가)
+const DB_VERSION = 4; // 버전 업그레이드 (동영상 저장소 추가)
 const DOCUMENTS_STORE = 'documents';
 const IMAGES_STORE = 'images';
 const PDFS_STORE = 'pdfs';
+const VIDEOS_STORE = 'videos';
 
 let db: IDBDatabase | null = null;
 
@@ -66,6 +76,13 @@ export const initDB = (): Promise<void> => {
         const pdfStore = db.createObjectStore(PDFS_STORE, { keyPath: 'id' });
         pdfStore.createIndex('name', 'name', { unique: false });
         pdfStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
+      // 동영상 저장소 (신규)
+      if (!db.objectStoreNames.contains(VIDEOS_STORE)) {
+        const videoStore = db.createObjectStore(VIDEOS_STORE, { keyPath: 'id' });
+        videoStore.createIndex('name', 'name', { unique: false });
+        videoStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
     };
   });
@@ -274,4 +291,73 @@ export const updatePdf = async (id: string, updates: Partial<PDFFile>): Promise<
 
   // 저장
   return savePdf(updatedPdf);
+};
+
+// ===== 동영상 관련 함수들 =====
+
+// 모든 동영상 가져오기
+export const getAllVideos = async (): Promise<VideoFile[]> => {
+  if (!db) await initDB();
+  const transaction = db!.transaction([VIDEOS_STORE], 'readonly');
+  const store = transaction.objectStore(VIDEOS_STORE);
+  return new Promise((resolve, reject) => {
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// 동영상 저장하기
+export const saveVideo = async (video: VideoFile): Promise<void> => {
+  if (!db) await initDB();
+  const transaction = db!.transaction([VIDEOS_STORE], 'readwrite');
+  const store = transaction.objectStore(VIDEOS_STORE);
+  return new Promise((resolve, reject) => {
+    const request = store.put(video);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// 동영상 가져오기 (ID로)
+export const getVideo = async (id: string): Promise<VideoFile | null> => {
+  if (!db) await initDB();
+  const transaction = db!.transaction([VIDEOS_STORE], 'readonly');
+  const store = transaction.objectStore(VIDEOS_STORE);
+  return new Promise((resolve, reject) => {
+    const request = store.get(id);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// 동영상 삭제하기
+export const deleteVideo = async (id: string): Promise<void> => {
+  if (!db) await initDB();
+  const transaction = db!.transaction([VIDEOS_STORE], 'readwrite');
+  const store = transaction.objectStore(VIDEOS_STORE);
+  return new Promise((resolve, reject) => {
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// 동영상 업데이트하기
+export const updateVideo = async (id: string, updates: Partial<VideoFile>): Promise<void> => {
+  if (!db) await initDB();
+
+  // 먼저 기존 동영상을 가져옴
+  const existingVideo = await getVideo(id);
+  if (!existingVideo) {
+    throw new Error('Video not found');
+  }
+
+  const updatedVideo: VideoFile = {
+    ...existingVideo,
+    ...updates
+  };
+
+  // 저장
+  await saveVideo(updatedVideo);
 };
