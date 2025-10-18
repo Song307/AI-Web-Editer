@@ -196,7 +196,8 @@ export const moveObjectLayer = (
 // 캔버스 줌
 export const zoomCanvas = (
   canvas: fabric.Canvas,
-  zoomType: 'in' | 'out' | 'fit' | 'reset'
+  zoomType: 'in' | 'out' | 'fit' | 'reset' | 'set',
+  value?: number
 ): void => {
   const currentZoom = canvas.getZoom();
   let newZoom = currentZoom;
@@ -225,8 +226,35 @@ export const zoomCanvas = (
     case 'reset':
       newZoom = 1;
       break;
+    case 'set':
+      newZoom = value || 1;
+      break;
   }
 
-  canvas.setZoom(newZoom);
+  const clampedZoom = Math.max(0.1, Math.min(3, newZoom)); // 10% ~ 300%
+  canvas.setZoom(clampedZoom);
   canvas.renderAll();
+};
+
+// 캔버스 줌 설정 (특정 값으로)
+export const setCanvasZoom = (canvas: fabric.Canvas, zoom: number): void => {
+  const clampedZoom = Math.max(0.1, Math.min(3, zoom)); // 10% ~ 300%
+  canvas.setZoom(clampedZoom);
+  canvas.renderAll();
+};
+
+// 캔버스 팬 (이동)
+export const panCanvas = (canvas: fabric.Canvas, deltaX: number, deltaY: number): void => {
+  const vpt = canvas.viewportTransform;
+  if (vpt) {
+    vpt[4] += deltaX;
+    vpt[5] += deltaY;
+    canvas.requestRenderAll();
+  }
+};
+
+// 캔버스 팬 리셋 (중앙으로)
+export const resetCanvasPan = (canvas: fabric.Canvas): void => {
+  canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+  canvas.requestRenderAll();
 };

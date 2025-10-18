@@ -108,7 +108,7 @@ function AppContent() {
       <header className="text-center mb-8 text-gray-900 dark:text-gray-100 relative z-10">
         <div className="flex justify-between items-center max-w-6xl mx-auto">
           <h1 className="text-5xl font-extrabold m-0 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-purple-400 tracking-tight">
-            {language === 'ko' ? 'AI 텍스트 편집기' : 'AI Text Editor'}
+            {language === 'ko' ? 'AI 워크스페이스' : 'AI Workspace'}
           </h1>
         </div>
       </header>

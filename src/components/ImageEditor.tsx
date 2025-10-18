@@ -4,7 +4,7 @@ import {
   Palette, Type, Square, Circle, Image as ImageIcon,
   Scissors, ArrowRepeat, GripHorizontal, GripVertical, ArrowsMove,
   ZoomIn, ZoomOut, ArrowCounterclockwise, ArrowClockwise, Save, Upload, Download,
-  Trash2, Copy, Eye, EyeSlash
+  Trash2, Copy, Eye, EyeSlash, ArrowsFullscreen
 } from 'react-bootstrap-icons';
 import { useCanvas } from '../hooks/useCanvas';
 import { useImageFilters, ImageFilters } from '../hooks/useImageFilters';
@@ -16,7 +16,8 @@ import {
   exportCanvas,
   loadImageFromFile,
   moveObjectLayer,
-  zoomCanvas
+  zoomCanvas,
+  panCanvas
 } from '../utils/canvasUtils';
 import { saveEditedImage, getAllEditedImages, EditedImageFile } from '../utils/db';
 import toast from 'react-hot-toast';
@@ -39,12 +40,142 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   const [selectedObject, setSelectedObject] = useState<any>(null);
   const [showProperties, setShowProperties] = useState(false);
 
+  // 줌 상태
+  const [currentZoom, setCurrentZoom] = useState(1);
+  const [isPanMode, setIsPanMode] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+
+  // 캔버스 컨테이너 ref
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+
   // 커스텀 훅 사용
   const { canvasRef, canvas, isReady, undo, redo, canUndo, canRedo, clearCanvas } = useCanvas({
     width: 800,
     height: 600,
     backgroundColor: '#f8f9fa'
   });
+
+  // 클립보드 상태
+  const [clipboard, setClipboard] = useState<any>(null);
+
+  // 복사 핸들러
+  const handleCopy = useCallback(() => {
+    if (!canvas) return;
+    const activeObject = canvas.getActiveObject();
+    if (activeObject) {
+      // 객체 복제
+      activeObject.clone((cloned: any) => {
+        setClipboard(cloned);
+        toast.success('복사되었습니다');
+      });
+    }
+  }, [canvas]);
+
+  // 붙여넣기 핸들러
+  const handlePaste = useCallback(() => {
+    if (!canvas || !clipboard) return;
+
+    // 클립보드 객체 복제
+    clipboard.clone((cloned: any) => {
+      // 위치를 약간 offset해서 붙여넣기
+      cloned.set({
+        left: cloned.left + 10,
+        top: cloned.top + 10,
+        evented: true,
+      });
+
+      canvas.add(cloned);
+      canvas.setActiveObject(cloned);
+      canvas.renderAll();
+      toast.success('붙여넣었습니다');
+    });
+  }, [canvas, clipboard]);
+
+  // 잘라내기 핸들러
+  const handleCut = useCallback(() => {
+    if (!canvas) return;
+    const activeObject = canvas.getActiveObject();
+    if (activeObject) {
+      // 복사 후 삭제
+      activeObject.clone((cloned: any) => {
+        setClipboard(cloned);
+        canvas.remove(activeObject);
+        canvas.renderAll();
+        toast.success('잘라내었습니다');
+      });
+    }
+  }, [canvas]);
+
+  // 삭제 핸들러
+  const handleDelete = useCallback(() => {
+    if (!canvas) return;
+    const activeObject = canvas.getActiveObject();
+    if (activeObject) {
+      canvas.remove(activeObject);
+      canvas.renderAll();
+      toast.success('삭제되었습니다');
+    }
+  }, [canvas]);
+
+  // 키보드 단축키 핸들러
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl 또는 Cmd 키 확인
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+      if (isCtrlOrCmd) {
+        switch (e.key.toLowerCase()) {
+          case 'z':
+            e.preventDefault();
+            if (e.shiftKey) {
+              // Ctrl+Shift+Z 또는 Cmd+Shift+Z - Redo
+              redo();
+            } else {
+              // Ctrl+Z 또는 Cmd+Z - Undo
+              undo();
+            }
+            break;
+          case 'y':
+            e.preventDefault();
+            // Ctrl+Y 또는 Cmd+Y - Redo
+            redo();
+            break;
+          case 'c':
+            e.preventDefault();
+            // Ctrl+C 또는 Cmd+C - Copy
+            handleCopy();
+            break;
+          case 'v':
+            e.preventDefault();
+            // Ctrl+V 또는 Cmd+V - Paste
+            handlePaste();
+            break;
+          case 'x':
+            e.preventDefault();
+            // Ctrl+X 또는 Cmd+X - Cut
+            handleCut();
+            break;
+        }
+      } else {
+        // Ctrl/Cmd 키 없이
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          // Delete 또는 Backspace - Delete
+          handleDelete();
+        }
+      }
+    };
+
+    // 이벤트 리스너 추가
+    document.addEventListener('keydown', handleKeyDown);
+
+    // 클린업
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [canvas, undo, redo, handleCopy, handlePaste, handleCut, handleDelete]);
 
   const { filters, applyFilters, updateFilter, resetFilters, hasActiveFilters } = useImageFilters();
 
@@ -187,10 +318,41 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   }, [canvas, selectedObject]);
 
   // 줌 핸들러
-  const handleZoom = useCallback((zoomType: 'in' | 'out' | 'fit' | 'reset') => {
-    if (!canvas) return;
-    zoomCanvas(canvas, zoomType);
-  }, [canvas]);
+  // CSS 기반 줌 핸들러
+  const handleZoomCSS = useCallback((zoomType: 'in' | 'out' | 'fit' | 'reset' | 'set', value?: number) => {
+    let newZoom = currentZoom;
+
+    switch (zoomType) {
+      case 'in':
+        newZoom = Math.min(currentZoom * 1.2, 3); // 최대 300%
+        break;
+      case 'out':
+        newZoom = Math.max(currentZoom / 1.2, 0.1); // 최소 10%
+        break;
+      case 'fit':
+        newZoom = 1; // 화면 맞춤은 100%로
+        setPanOffset({ x: 0, y: 0 }); // 팬도 리셋
+        break;
+      case 'reset':
+        newZoom = 1;
+        setPanOffset({ x: 0, y: 0 }); // 팬도 리셋
+        break;
+      case 'set':
+        newZoom = value || 1;
+        break;
+    }
+
+    const clampedZoom = Math.max(0.1, Math.min(3, newZoom));
+    setCurrentZoom(clampedZoom);
+  }, [currentZoom]);
+
+  // CSS 기반 팬 핸들러
+  const handlePanCSS = useCallback((deltaX: number, deltaY: number) => {
+    setPanOffset(prev => ({
+      x: prev.x + deltaX,
+      y: prev.y + deltaY
+    }));
+  }, []);
 
   // 내보내기 핸들러
   const handleExport = useCallback((format: 'png' | 'jpeg' | 'webp') => {
@@ -241,8 +403,29 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     if (!canvas) return;
     e.preventDefault();
     const zoomType = e.deltaY > 0 ? 'out' : 'in';
-    zoomCanvas(canvas, zoomType);
-  }, [canvas]);
+    handleZoomCSS(zoomType);
+  }, [canvas, handleZoomCSS]);
+
+  // 마우스 이벤트 핸들러들 (팬 기능)
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!isPanMode) return;
+    e.preventDefault();
+    setIsDragging(true);
+    setLastPos({ x: e.clientX, y: e.clientY });
+  }, [isPanMode]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging || !isPanMode) return;
+    e.preventDefault();
+    const deltaX = e.clientX - lastPos.x;
+    const deltaY = e.clientY - lastPos.y;
+    handlePanCSS(deltaX, deltaY);
+    setLastPos({ x: e.clientX, y: e.clientY });
+  }, [isDragging, isPanMode, lastPos, handlePanCSS]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -396,26 +579,72 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
 
           <div className="flex items-center space-x-2">
             {/* 줌 컨트롤 */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleZoomCSS('out')}
+                className="p-2 rounded hover:bg-gray-100"
+                title="축소"
+              >
+                <ZoomOut size={18} />
+              </button>
+
+              {/* 줌 슬라이더 */}
+              <div className="flex items-center space-x-2 min-w-[120px]">
+                <input
+                  type="range"
+                  min="0.1"
+                  max="3"
+                  step="0.1"
+                  value={currentZoom}
+                  onChange={(e) => handleZoomCSS('set', parseFloat(e.target.value))}
+                  className="flex-1"
+                  title={`줌: ${(currentZoom * 100).toFixed(0)}%`}
+                />
+                <span className="text-xs text-gray-600 min-w-[35px]">
+                  {(currentZoom * 100).toFixed(0)}%
+                </span>
+              </div>
+
+              <button
+                onClick={() => handleZoomCSS('in')}
+                className="p-2 rounded hover:bg-gray-100"
+                title="확대"
+              >
+                <ZoomIn size={18} />
+              </button>
+            </div>
+
+            {/* 구분선 */}
+            <div className="w-px h-6 bg-gray-300 mx-2" />
+
+            {/* 줌 맞춤 & 리셋 */}
             <button
-              onClick={() => handleZoom('out')}
-              className="p-2 rounded hover:bg-gray-100"
-              title="축소"
-            >
-              <ZoomOut size={18} />
-            </button>
-            <button
-              onClick={() => handleZoom('fit')}
+              onClick={() => handleZoomCSS('fit')}
               className="p-2 rounded hover:bg-gray-100"
               title="화면 맞춤"
             >
               <ArrowsMove size={18} />
             </button>
             <button
-              onClick={() => handleZoom('in')}
+              onClick={() => handleZoomCSS('reset')}
               className="p-2 rounded hover:bg-gray-100"
-              title="확대"
+              title="줌 리셋"
             >
-              <ZoomIn size={18} />
+              <ArrowRepeat size={18} />
+            </button>
+
+            {/* 구분선 */}
+            <div className="w-px h-6 bg-gray-300 mx-2" />
+
+            {/* 팬 모드 토글 */}
+            <button
+              onClick={() => setIsPanMode(!isPanMode)}
+              className={`p-2 rounded hover:bg-gray-100 cursor-pointer ${
+                isPanMode ? 'bg-blue-100 text-blue-600' : ''
+              }`}
+              title={isPanMode ? '팬 모드 끄기' : '팬 모드 켜기'}
+            >
+              <ArrowsFullscreen size={18} />
             </button>
 
             {/* 구분선 */}
@@ -460,7 +689,20 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
 
         {/* 캔버스 영역 */}
         <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
-          <div className="relative">
+          <div
+            ref={canvasContainerRef}
+            className="relative"
+            style={{
+              transform: `scale(${currentZoom}) translate(${panOffset.x}px, ${panOffset.y}px)`,
+              transformOrigin: 'center center',
+              transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+              cursor: isPanMode ? (isDragging ? 'grabbing' : 'grab') : 'default'
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
             <canvas
               ref={canvasRef}
               onWheel={handleWheel}
