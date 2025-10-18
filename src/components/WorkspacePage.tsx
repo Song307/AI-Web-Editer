@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Folder, FileText, Grid, List, Plus, Search, Trash3, Pencil, X, Image, Upload, FileEarmarkPdf, ChevronRight, ChevronDown, PlayCircle } from  'react-bootstrap-icons';
+import React, { useState, useEffect, useRef } from 'react';
+import { Folder, FileText, Grid, List, Plus, Search, Trash3, Pencil, X, Image, Upload, FileEarmarkPdf, ChevronRight, ChevronDown, PlayCircle, ZoomOut, ZoomIn, ArrowRepeat, ArrowCounterclockwise, ArrowClockwise, ArrowLeft, ArrowRight, Download, Fullscreen } from  'react-bootstrap-icons';
 import toast, { Toaster } from 'react-hot-toast';
 import { getAllDocuments, deleteDocument, updateDocument, Document, getAllImages, saveImage, deleteImage, ImageFile, updateImage, PDFFile, savePdf, getAllPdfs, deletePdf, updatePdf, VideoFile, saveVideo, getAllVideos, deleteVideo, updateVideo } from '../utils/db';
 import PDFViewer from './PDFViewer';
@@ -8,6 +8,9 @@ import VideoPlayer from './VideoPlayer';
 import RenameModal from './RenameModal';
 import ConfirmModal from './ConfirmModal';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
+import Modal from './UI/shared/Modal';
+import ModalHeader from './UI/shared/ModalHeader';
+import ModalToolbar from './UI/shared/ModalToolbar';
 import './WorkspacePage.css';
 
 interface WorkspacePageProps {
@@ -39,6 +42,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
   const [confirmState, setConfirmState] = useState<{ open: boolean; id?: string; type?: 'document' | 'image' | 'pdf' | 'video' }>({ open: false });
   const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; target?: any }>({ open: false, x: 0, y: 0 });
+  const pdfViewerRef = useRef<any>(null);
+  const pdfModalRef = useRef<HTMLDivElement>(null);
 
   // 이미지 뷰어 닫을 때 상태 초기화
   const closeImageViewer = () => {
@@ -979,52 +984,57 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
         <div className="flex gap-1 mb-5 border-b border-gray-200 dark:border-gray-700 pb-3">
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === 'all'
                 ? 'bg-blue-600 text-white'
                 : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
+            <Grid size={16} />
             전체보기
           </button>
           <button
             onClick={() => setActiveTab('documents')}
-            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === 'documents'
                 ? 'bg-blue-600 text-white'
                 : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
+            <FileText size={16} />
             문서
           </button>
           <button
             onClick={() => setActiveTab('images')}
-            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === 'images'
                 ? 'bg-blue-600 text-white'
                 : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
+            <Image size={16} />
             이미지
           </button>
           <button
             onClick={() => setActiveTab('pdfs')}
-            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === 'pdfs'
                 ? 'bg-blue-600 text-white'
                 : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
+            <FileEarmarkPdf size={16} />
             PDF
           </button>
           <button
             onClick={() => setActiveTab('videos')}
-            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors flex items-center gap-2 ${
               activeTab === 'videos'
                 ? 'bg-blue-600 text-white'
                 : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
+            <PlayCircle size={16} />
             동영상
           </button>
         </div>
@@ -1904,235 +1914,85 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
 
       {/* Video Player Modal */}
       {selectedVideo && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            position: 'relative',
-            maxWidth: '90vw',
-            maxHeight: '90vh',
-            background: 'white',
-            borderRadius: '8px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: '10px',
-              right: '10px',
-              zIndex: 1001
-            }}>
-              <button
-                onClick={closeVideoViewer}
-                style={{
-                  background: 'rgba(0, 0, 0, 0.5)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '30px',
-                  height: '30px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                ×
-              </button>
-            </div>
+        <Modal onClose={closeVideoViewer} size="large">
+          <ModalHeader fileName={selectedVideo.name} onClose={closeVideoViewer} />
+          <div className="flex-1 flex items-center justify-center">
             <VideoPlayer
               video={selectedVideo}
             />
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* PDF Viewer Modal */}
       {selectedPdf && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            position: 'relative',
-            maxWidth: '80vw',
-            maxHeight: '80vh',
-            background: 'var(--bg-primary)',
-            borderRadius: 'var(--border-radius)',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            {/* PDF Viewer Header */}
-            <div style={{
-              padding: '16px',
-              background: 'var(--bg-secondary)',
-              borderBottom: '1px solid var(--border-color)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <h3 style={{
-                fontSize: '1rem',
-                fontWeight: '600',
-                color: 'var(--text-primary)',
-                margin: 0
-              }}>
-                {selectedPdf.name}
-              </h3>
-              <button
-                onClick={() => setSelectedPdf(null)}
-                style={{
-                  padding: '8px',
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  borderRadius: '4px'
-                }}
-                title="닫기"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* PDF Viewer Content */}
-            <div style={{ flex: 1, overflow: 'auto' }}>
-              <PDFViewer
-                pdfData={selectedPdf.data}
-                fileName={selectedPdf.name}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Image Viewer Modal */}
-      {selectedImage && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            position: 'relative',
-            maxWidth: '90vw',
-            maxHeight: '90vh',
-            background: 'white',
-            borderRadius: '8px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: '10px',
-              right: '10px',
-              zIndex: 1001
-            }}>
-              <button
-                onClick={closeImageViewer}
-                style={{
-                  background: 'rgba(0, 0, 0, 0.5)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '30px',
-                  height: '30px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                ×
-              </button>
-            </div>
-            <img
-              src={URL.createObjectURL(new Blob([selectedImage.data], { type: selectedImage.type }))}
-              alt={selectedImage.name}
-              style={{
-                maxWidth: '100%',
-                maxHeight: '100%',
-                objectFit: 'contain'
-              }}
+        <Modal ref={pdfModalRef} onClose={() => setSelectedPdf(null)} size="medium">
+          <ModalHeader fileName={selectedPdf.name} onClose={() => setSelectedPdf(null)} />
+          <ModalToolbar>
+            <button onClick={() => pdfViewerRef.current?.toggleThumbnails()} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors" title="썸네일 사이드바">
+              <List size={16} />
+            </button>
+            <button onClick={() => pdfViewerRef.current?.zoomOut()} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors" title="축소">
+              <ZoomOut size={16} />
+            </button>
+            <span className="text-sm text-gray-600 dark:text-gray-300 min-w-[60px] text-center">{pdfViewerRef.current?.scale ? Math.round(pdfViewerRef.current.scale * 100) : 100}%</span>
+            <button onClick={() => pdfViewerRef.current?.zoomIn()} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors" title="확대">
+              <ZoomIn size={16} />
+            </button>
+            <button onClick={() => pdfViewerRef.current?.resetZoom()} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors" title="원래 크기로">
+              <ArrowRepeat size={16} />
+            </button>
+            <button onClick={() => pdfViewerRef.current?.rotateCounterClockwise()} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors" title="반시계방향 회전">
+              <ArrowCounterclockwise size={16} />
+            </button>
+            <span className="text-sm text-gray-600 dark:text-gray-300 min-w-[40px] text-center">{pdfViewerRef.current?.rotation || 0}°</span>
+            <button onClick={() => pdfViewerRef.current?.rotateClockwise()} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors" title="시계방향 회전">
+              <ArrowClockwise size={16} />
+            </button>
+            <button onClick={() => pdfViewerRef.current?.resetRotation()} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors" title="회전 초기화">
+              <ArrowRepeat size={16} />
+            </button>
+            <button onClick={() => pdfViewerRef.current?.goToPrevPage()} disabled={pdfViewerRef.current?.pageNumber <= 1} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="이전 페이지">
+              <ArrowLeft size={16} />
+            </button>
+            <span className="text-sm text-gray-600 dark:text-gray-300 min-w-[80px] text-center">
+              {pdfViewerRef.current?.pageNumber || 1} / {pdfViewerRef.current?.numPages || '?'}
+            </span>
+            <button onClick={() => pdfViewerRef.current?.goToNextPage()} disabled={pdfViewerRef.current?.pageNumber >= (pdfViewerRef.current?.numPages || 1)} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="다음 페이지">
+              <ArrowRight size={16} />
+            </button>
+            <button onClick={() => pdfViewerRef.current?.downloadPDF()} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors" title="다운로드">
+              <Download size={16} />
+            </button>
+            <button onClick={async () => {
+              if (pdfModalRef.current) {
+                try {
+                  if (pdfModalRef.current.requestFullscreen) {
+                    await pdfModalRef.current.requestFullscreen();
+                  } else if ((pdfModalRef.current as any).webkitRequestFullscreen) {
+                    await (pdfModalRef.current as any).webkitRequestFullscreen();
+                  } else if ((pdfModalRef.current as any).mozRequestFullScreen) {
+                    await (pdfModalRef.current as any).mozRequestFullScreen();
+                  } else if ((pdfModalRef.current as any).msRequestFullscreen) {
+                    await (pdfModalRef.current as any).msRequestFullscreen();
+                  }
+                } catch (error) {
+                  console.error('PDF 뷰어 전체화면 실패:', error);
+                }
+              }
+            }} className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors" title="전체화면">
+              <Fullscreen size={16} />
+            </button>
+          </ModalToolbar>
+          <div className="flex-1 overflow-auto">
+            <PDFViewer
+              ref={pdfViewerRef}
+              pdfData={selectedPdf.data}
+              fileName={selectedPdf.name}
+              toolbarVisible={false}
             />
           </div>
-        </div>
-      )}
-
-      {/* Video Player Modal */}
-      {selectedVideo && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            position: 'relative',
-            maxWidth: '90vw',
-            maxHeight: '90vh',
-            background: 'white',
-            borderRadius: '8px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: '10px',
-              right: '10px',
-              zIndex: 1001
-            }}>
-              <button
-                onClick={closeVideoViewer}
-                style={{
-                  background: 'rgba(0, 0, 0, 0.5)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '30px',
-                  height: '30px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                ×
-              </button>
-            </div>
-            <VideoPlayer
-              video={selectedVideo}
-            />
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Modals */}

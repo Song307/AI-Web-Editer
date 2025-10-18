@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { FileText, ClipboardCheck, Gear, Plus, Trash3, Folder, Database } from 'react-bootstrap-icons';
+import { FileText, ClipboardCheck, Gear, Plus, Trash3, Folder, Database, Palette } from 'react-bootstrap-icons';
 import Editor from './components/Editor';
 import ClipboardPage from './components/ClipboardPage';
 import WorkspacePage from './components/WorkspacePage';
 import StoragePage from './components/StoragePage';
 import Settings from './components/Settings';
+import ImageEditor from './components/ImageEditor';
 import { getAllDocuments, initDB, deleteDocument, Document } from './utils/db';
 import { Toaster } from 'react-hot-toast';
 import './App.css';
@@ -160,6 +161,17 @@ function AppContent() {
               <span>{language === 'ko' ? '저장공간' : 'Storage'}</span>
             </button>
             <button
+              onClick={() => navigate('/image-editor')}
+              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+                window.location.pathname === '/image-editor'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              <Palette size={18} />
+              <span>{language === 'ko' ? '이미지 편집기' : 'Image Editor'}</span>
+            </button>
+            <button
               onClick={() => navigate('/settings')}
               className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
                 window.location.pathname === '/settings'
@@ -228,6 +240,7 @@ function AppContent() {
             <Route path="/documents/:id" element={<Editor ref={editorRef} documentId={selectedDocumentId || undefined} onSave={handleSave} onDirtyChange={setIsDirty} />} />
             <Route path="/clipboard" element={<ClipboardPage />} />
             <Route path="/storage" element={<StoragePage />} />
+            <Route path="/image-editor" element={<ImageEditor />} />
             <Route path="/workspace" element={<WorkspacePage onDocumentSelect={(id) => {
               if (id === 'new') {
                 // 새 문서 만들기 로직

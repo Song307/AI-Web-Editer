@@ -35,8 +35,18 @@ export interface VideoFile {
   createdAt: Date;
 }
 
+export interface EditedImageFile {
+  id: string;
+  name: string;
+  content: string; // Base64 encoded image data
+  folder: string; // 폴더 경로
+  createdAt: string; // ISO string
+  updatedAt: string; // ISO string
+}
+
+
 const DB_NAME = 'AITextEditorDB';
-const DB_VERSION = 4; // 버전 업그레이드 (동영상 저장소 추가)
+const DB_VERSION = 5; // 버전 업그레이드 (동영상 저장소 추가)
 const DOCUMENTS_STORE = 'documents';
 const IMAGES_STORE = 'images';
 const PDFS_STORE = 'pdfs';
@@ -360,4 +370,54 @@ export const updateVideo = async (id: string, updates: Partial<VideoFile>): Prom
 
   // 저장
   await saveVideo(updatedVideo);
+};
+// 편집된 이미지 저장소 상수
+const EDITED_IMAGES_STORE = 'editedImages';
+
+// 편집된 이미지 저장하기
+export const saveEditedImage = async (image: EditedImageFile): Promise<void> => {
+  if (!db) await initDB();
+  const transaction = db!.transaction([EDITED_IMAGES_STORE], 'readwrite');
+  const store = transaction.objectStore(EDITED_IMAGES_STORE);
+  return new Promise((resolve, reject) => {
+    const request = store.put(image);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// 모든 편집된 이미지 가져오기
+export const getAllEditedImages = async (): Promise<EditedImageFile[]> => {
+  if (!db) await initDB();
+  const transaction = db!.transaction([EDITED_IMAGES_STORE], 'readonly');
+  const store = transaction.objectStore(EDITED_IMAGES_STORE);
+  return new Promise((resolve, reject) => {
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// 편집된 이미지 가져오기 (ID로)
+export const getEditedImage = async (id: string): Promise<EditedImageFile | null> => {
+  if (!db) await initDB();
+  const transaction = db!.transaction([EDITED_IMAGES_STORE], 'readonly');
+  const store = transaction.objectStore(EDITED_IMAGES_STORE);
+  return new Promise((resolve, reject) => {
+    const request = store.get(id);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// 편집된 이미지 삭제하기
+export const deleteEditedImage = async (id: string): Promise<void> => {
+  if (!db) await initDB();
+  const transaction = db!.transaction([EDITED_IMAGES_STORE], 'readwrite');
+  const store = transaction.objectStore(EDITED_IMAGES_STORE);
+  return new Promise((resolve, reject) => {
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
 };

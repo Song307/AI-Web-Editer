@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -28,9 +28,11 @@ interface PDFViewerProps {
   pdfData?: string | ArrayBuffer;
   fileName?: string;
   onClose?: () => void;
+  toolbarVisible?: boolean;
+  customToolbar?: React.ReactNode;
 }
 
-const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose }) => {
+const PDFViewer = forwardRef<any, PDFViewerProps>(({ file, pdfData, fileName, onClose, toolbarVisible = true, customToolbar }, ref) => {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -51,13 +53,19 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose 
   const [searchText, setSearchText] = useState(''); // 검색 텍스트
   const [searchResults, setSearchResults] = useState<any[]>([]); // 검색 결과
   const [currentSearchIndex, setCurrentSearchIndex] = useState(-1); // 현재 검색 결과 인덱스
+  const [pageSizes, setPageSizes] = useState<{ [key: number]: { width: number; height: number } }>({}); // 각 페이지의 크기 정보
   const pdfDocumentRef = useRef<any>(null); // PDF 문서 참조
+  const thumbnailsListRef = useRef<HTMLDivElement>(null); // 썸네일 리스트 참조
+  const thumbnailsSidebarRef = useRef<HTMLDivElement>(null); // 썸네일 사이드바 참조
+  const isSidebarHoverRef = useRef<boolean>(false); // 사이드바 호버 상태 추적
+  const lockScrollRef = useRef<boolean>(false); // 완전 분리를 위한 잠금 플래그
   
   // 풀스크린과 PDF 정보 표시를 위한 상태
   const [isFullscreen, setIsFullscreen] = useState(false); // 풀스크린 모드 여부
   const [showPdfInfo, setShowPdfInfo] = useState(false); // PDF 정보 표시 여부
   const [pdfInfo, setPdfInfo] = useState<any>(null); // PDF 메타데이터 정보
   const viewerRef = useRef<HTMLDivElement>(null); // 뷰어 컨테이너 참조
+  const mainViewerRef = useRef<HTMLDivElement>(null); // 메인 PDF 뷰어 영역 참조
 
   // PDF 데이터 처리
   const processedPdfData = React.useMemo(() => {
@@ -79,19 +87,23 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose 
     return pdfData;
   }, [pdfData, file]);
 
-  // 줌 기능
-  const zoomIn = () => {
-    setScale(prev => Math.min(prev + 0.25, 3.0)); // 최대 300%
-  };
-
-  const zoomOut = () => {
-    setScale(prev => Math.max(prev - 0.25, 0.5)); // 최소 50%
-  };
-
-  const resetZoom = () => {
-    setScale(1.0);
-    setPosition({ x: 0, y: 0 }); // 줌 리셋 시 위치도 초기화
-  };
+  useImperativeHandle(ref, () => ({
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    rotateClockwise,
+    rotateCounterClockwise,
+    resetRotation,
+    goToPrevPage,
+    goToNextPage,
+    goToPage,
+    toggleThumbnails,
+    togglePdfInfo,
+    downloadPDF,
+    toggleFullscreen,
+    // expose a small status getter
+    getState: () => ({ rotation, pageNumber, numPages })
+  }));
 
   // 드래그-투-팬 기능
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -103,6 +115,11 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose 
       });
     }
   };
+
+  // 줌 관련 함수
+  const zoomIn = () => setScale(s => Math.min(s + 0.1, 4));
+  const zoomOut = () => setScale(s => Math.max(s - 0.1, 0.25));
+  const resetZoom = () => setScale(1);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDragging && scale > 1) {
@@ -282,6 +299,29 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose 
     };
   }, [isFullscreen]);
 
+  // 키보드 이벤트 핸들러 (좌우 화살표로 페이지 이동)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // PDF 뷰어가 활성화되어 있고, 입력 필드가 아닌 경우에만 처리
+      if (!viewerRef.current?.contains(document.activeElement as Node) && 
+          document.activeElement?.tagName !== 'INPUT' && 
+          document.activeElement?.tagName !== 'TEXTAREA') {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          goToPrevPage();
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          goToNextPage();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [numPages]); // numPages가 변경될 때마다 리스너 재설정
+
   // PDF 정보 표시 토글
   const togglePdfInfo = () => {
     setShowPdfInfo(prev => !prev);
@@ -327,6 +367,42 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose 
       extractPdfInfo(pdfDocumentRef.current);
     }
   }, [pdfDocumentRef.current, extractPdfInfo]);
+
+  // 썸네일 사이드바 스크롤 분리를 위한 useEffect
+  // Replace: we'll attach/detach the document wheel listener on pointer enter/leave
+  const wheelHandlerRef = useRef<((e: WheelEvent) => void) | null>(null);
+
+  const addDocWheelListener = () => {
+    if (wheelHandlerRef.current) return; // already attached
+    const handler = (e: WheelEvent) => {
+      if (!isSidebarHoverRef.current) return;
+      const sidebar = thumbnailsSidebarRef.current;
+      if (!sidebar) return;
+      // Only act if event target is inside the sidebar
+      const target = e.target as Node;
+      if (!sidebar.contains(target)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      sidebar.scrollTop += e.deltaY;
+    };
+    wheelHandlerRef.current = handler;
+    document.addEventListener('wheel', handler, { passive: false, capture: true });
+  };
+
+  const removeDocWheelListener = () => {
+    const handler = wheelHandlerRef.current;
+    if (!handler) return;
+    document.removeEventListener('wheel', handler, { capture: true } as any);
+    wheelHandlerRef.current = null;
+  };
+
+  // Ensure we remove listener on unmount
+  useEffect(() => {
+    return () => {
+      removeDocWheelListener();
+    };
+  }, []);
 
   // PDF 문서 로드 성공 시 참조 저장
   const onDocumentLoadSuccessWithRef = useCallback(async (pdf: any) => {
@@ -376,7 +452,8 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose 
 
   return (
     <div className="pdf-viewer-container" ref={viewerRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div className="pdf-viewer-toolbar">
+      {toolbarVisible && customToolbar ? customToolbar : toolbarVisible && (
+        <div className="pdf-viewer-toolbar">
         {/* 썸네일 토글 버튼 */}
         <div className="pdf-sidebar-controls">
           <button onClick={toggleThumbnails} className={`pdf-tool-btn ${showThumbnails ? 'active' : ''}`} title="썸네일 사이드바">
@@ -431,8 +508,9 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose 
               value={pageNumber}
               onChange={(e) => goToPage(parseInt(e.target.value) || 1)}
               className="pdf-page-input"
+              disabled={numPages === null}
             />
-            / {numPages || '?'}
+            / {numPages === null ? '로딩 중...' : numPages}
           </span>
 
           <button
@@ -491,46 +569,88 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose 
           </button>
         </div>
       </div>
+      )}
 
-      <div className="pdf-viewer-content" style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div className="pdf-viewer-content" style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'visible' }}>
         {/* 썸네일 사이드바 */}
         {showThumbnails && (
-          <div className="pdf-thumbnails-sidebar" style={{ flex: '0 0 220px', overflowY: 'auto', maxHeight: '100%' }}>
-            <div className="pdf-thumbnails-header">
-              <h4>페이지</h4>
+          <div
+            className="pdf-thumbnails-sidebar"
+            ref={thumbnailsSidebarRef}
+            style={{ flex: `0 0 ${isFullscreen ? '300px' : '250px'}`, display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', overscrollBehavior: 'contain' }}
+            onPointerEnter={() => {
+              // 마우스가 사이드바에 올라오면 상태 플래그 설정 및 wheel 리스너 attach
+              isSidebarHoverRef.current = true;
+              addDocWheelListener();
+            }}
+            onPointerLeave={() => {
+              // 떠나면 복구 및 wheel 리스너 제거
+              isSidebarHoverRef.current = false;
+              removeDocWheelListener();
+            }}
+          >
+            <div className="pdf-thumbnails-header" style={{ flexShrink: 0, padding: '12px 16px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
+              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#374151' }}>페이지</h4>
             </div>
-            <div className="pdf-thumbnails-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {Array.from({ length: numPages || 0 }, (_, index) => (
-                <div
-                  key={index + 1}
-                  className={`pdf-thumbnail-item ${pageNumber === index + 1 ? 'active' : ''}`}
-                  onClick={() => setPageNumber(index + 1)}
-                >
-                  <div className="pdf-thumbnail-page">
-                    <Document
-                      file={processedPdfData}
-                      loading=""
-                      className="pdf-thumbnail-doc"
-                    >
-                      <Page
-                        pageNumber={index + 1}
-                        scale={0.15}
-                        renderTextLayer={false}
-                        renderAnnotationLayer={false}
-                        className="pdf-thumbnail-page-content"
+            <div className="pdf-thumbnails-list" ref={thumbnailsListRef} style={{ flex: 1, overflowY: 'auto', padding: '4px', display: 'flex', flexDirection: 'column', gap: '4px', minHeight: 0, overscrollBehavior: 'contain' }}>
+              {Array.from({ length: numPages || 0 }, (_, index) => {
+                const pageSize = pageSizes[index + 1];
+                const aspectRatio = pageSize ? pageSize.width / pageSize.height : 0.707; // 기본 A4 비율 (210/297 ≈ 0.707)
+                const thumbnailWidth = isFullscreen ? 280 : 230; // 전체화면에서는 더 큰 썸네일
+                const thumbnailHeight = thumbnailWidth / aspectRatio;
+                
+                return (
+                  <div
+                    key={index + 1}
+                    className={`pdf-thumbnail-item ${pageNumber === index + 1 ? 'active' : ''}`}
+                    onClick={() => setPageNumber(index + 1)}
+                    style={{ 
+                      width: '100%', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '4px',
+                      border: pageNumber === index + 1 ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                      backgroundColor: pageNumber === index + 1 ? '#eff6ff' : '#ffffff'
+                    }}
+                  >
+                    <div className="pdf-thumbnail-page" style={{ width: `${thumbnailWidth}px`, height: `${thumbnailHeight}px`, maxHeight: isFullscreen ? '300px' : '200px', border: '1px solid #d1d5db', borderRadius: '2px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9fafb' }}>
+                      <Document
+                        file={processedPdfData}
                         loading=""
-                      />
-                    </Document>
+                        className="pdf-thumbnail-doc"
+                      >
+                        <Page
+                          pageNumber={index + 1}
+                          scale={0.3}
+                          renderTextLayer={false}
+                          renderAnnotationLayer={false}
+                          className="pdf-thumbnail-page-content"
+                          loading=""
+                          onLoadSuccess={(page) => {
+                            // 페이지 크기 정보가 아직 없거나 변경된 경우에만 업데이트
+                            if (!pageSizes[index + 1] || pageSizes[index + 1].width !== page.width || pageSizes[index + 1].height !== page.height) {
+                              setPageSizes(prev => ({
+                                ...prev,
+                                [index + 1]: { width: page.width, height: page.height }
+                              }));
+                            }
+                          }}
+                        />
+                      </Document>
+                    </div>
+                    <div className="pdf-thumbnail-number" style={{ marginTop: '2px', fontSize: '11px', fontWeight: '500', color: '#6b7280' }}>{index + 1}</div>
                   </div>
-                  <div className="pdf-thumbnail-number">{index + 1}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
         {/* 메인 PDF 뷰어 */}
-        <div className={`pdf-main-viewer ${showThumbnails ? 'with-sidebar' : ''}`} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+  <div ref={mainViewerRef} className={`pdf-main-viewer ${showThumbnails ? 'with-sidebar' : ''}`} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           {/* PDF 정보 패널 */}
           {showPdfInfo && pdfInfo && (
             <div className="pdf-info-panel">
@@ -634,6 +754,6 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ file, pdfData, fileName, onClose 
       </div>
     </div>
   );
-};
+});
 
 export default PDFViewer;

@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, ZoomOut, ZoomIn, ArrowClockwise, ArrowCounterclockwise, ArrowRepeat, Download, Fullscreen, FullscreenExit } from 'react-bootstrap-icons';
 import { ImageFile } from '../../utils/db';
+import Modal from '../UI/shared/Modal';
+import ModalHeader from '../UI/shared/ModalHeader';
+import ModalToolbar from '../UI/shared/ModalToolbar';
 
 interface ImageViewerProps {
   image: ImageFile | null;
@@ -55,7 +58,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ image, onClose }) => {
     URL.revokeObjectURL(url);
   };
 
-  const toggleImageFullscreen = async () => {
+    const toggleImageFullscreen = async () => {
     if (!imageViewerRef.current) return;
 
     try {
@@ -80,6 +83,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ image, onClose }) => {
           await (document as any).msExitFullscreen();
         }
       }
+      setImageFullscreen(!imageFullscreen);
     } catch (error) {
       console.error('풀스크린 모드 전환 실패:', error);
     }
@@ -144,103 +148,23 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ image, onClose }) => {
   if (!image) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0, 0, 0, 0.8)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000
-    }}>
-      <div
-        ref={imageViewerRef}
-        style={{
-          position: 'relative',
-          maxWidth: '90vw',
-          maxHeight: '90vh',
-          background: 'var(--bg-primary)',
-          borderRadius: 'var(--border-radius)',
-          overflow: 'hidden'
-        }}
-      >
-        {/* Image Viewer Header */}
-        <div style={{
-          padding: '16px',
-          background: 'var(--bg-secondary)',
-          borderBottom: '1px solid var(--border-color)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <h3 style={{
-            fontSize: '1rem',
-            fontWeight: '600',
-            color: 'var(--text-primary)',
-            margin: 0
-          }}>
-            {image.name}
-          </h3>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '8px',
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              borderRadius: '4px'
-            }}
-            title="닫기"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <Modal ref={imageViewerRef} onClose={onClose} size="large" transparent={true}>
+      <ModalHeader fileName={image.name} onClose={onClose} />
 
-        {/* Image Viewer Controls */}
-        <div style={{
-          padding: '8px 16px',
-          background: 'var(--bg-secondary)',
-          borderBottom: '1px solid var(--border-color)',
-          display: 'flex',
-          gap: '8px',
-          alignItems: 'center'
-        }}>
+        <ModalToolbar>
           <button
             onClick={zoomImageOut}
-            style={{
-              padding: '6px',
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
+            className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
             title="축소"
           >
             <ZoomOut size={16} />
           </button>
-          <span style={{
-            fontSize: '0.875rem',
-            color: 'var(--text-secondary)',
-            minWidth: '60px',
-            textAlign: 'center'
-          }}>
+          <span className="text-sm text-gray-600 dark:text-gray-300 min-w-[60px] text-center">
             {Math.round(imageZoom * 100)}%
           </span>
           <button
             onClick={zoomImageIn}
-            style={{
-              padding: '6px',
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
+            className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
             title="확대"
           >
             <ZoomIn size={16} />
@@ -248,57 +172,32 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ image, onClose }) => {
           <div style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 8px' }} />
           <button
             onClick={rotateImageCounterClockwise}
-            style={{
-              padding: '6px',
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
+            className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
             title="반시계 방향 회전"
           >
             <ArrowCounterclockwise size={16} />
           </button>
           <button
             onClick={rotateImageClockwise}
-            style={{
-              padding: '6px',
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
+            className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
             title="시계 방향 회전"
           >
             <ArrowClockwise size={16} />
           </button>
-          <div style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 8px' }} />
+          <span className="text-sm text-gray-600 dark:text-gray-300 min-w-[40px] text-center">
+            {imageRotation}°
+          </span>
+          <div className="w-px h-5 bg-gray-300 dark:bg-gray-500 mx-2" />
           <button
             onClick={resetImageZoom}
-            style={{
-              padding: '6px',
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
+            className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
             title="줌 초기화"
           >
             <ArrowRepeat size={16} />
           </button>
           <button
             onClick={resetImageRotation}
-            style={{
-              padding: '6px',
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
+            className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
             title="회전 초기화"
           >
             <ArrowRepeat size={16} />
@@ -306,65 +205,39 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ image, onClose }) => {
           <div style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 8px' }} />
           <button
             onClick={downloadImage}
-            style={{
-              padding: '6px',
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
+            className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
             title="다운로드"
           >
             <Download size={16} />
           </button>
           <button
             onClick={toggleImageFullscreen}
-            style={{
-              padding: '6px',
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '4px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
+            className="p-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
             title={imageFullscreen ? '전체화면 종료' : '전체화면'}
           >
             {imageFullscreen ? <FullscreenExit size={16} /> : <Fullscreen size={16} />}
           </button>
-        </div>
+      </ModalToolbar>
 
-        {/* Image Display */}
-        <div
+      <div className="flex-1 overflow-hidden flex items-center justify-center relative">
+        <img
+          src={URL.createObjectURL(new Blob([image.data], { type: image.type }))}
+          alt={image.name}
+          className={`max-w-full max-h-full ${imageZoom > 1 ? 'cursor-grab' : 'cursor-default'} select-none relative`}
           style={{
-            padding: '20px',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            minHeight: '400px',
-            cursor: imageZoom > 1 ? 'grab' : 'default',
-            overflow: 'hidden'
+            transform: `scale(${imageZoom}) rotate(${imageRotation}deg)`,
+            transformOrigin: 'center',
+            left: imagePosition.x,
+            top: imagePosition.y
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
-        >
-          <img
-            src={URL.createObjectURL(new Blob([image.data], { type: image.type }))}
-            alt={image.name}
-            style={{
-              maxWidth: '100%',
-              maxHeight: '100%',
-              transform: `scale(${imageZoom}) rotate(${imageRotation}deg) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
-              transition: isDragging ? 'none' : 'transform 0.1s ease',
-              userSelect: 'none'
-            }}
-            draggable={false}
-          />
-        </div>
+          draggable={false}
+        />
       </div>
-    </div>
+    </Modal>
   );
 };
 
