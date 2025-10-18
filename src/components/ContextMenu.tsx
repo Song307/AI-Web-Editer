@@ -82,21 +82,10 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }) => {
   return (
     <div
       ref={menuRef}
+      className="fixed z-[999999] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg min-w-[150px] max-w-[200px] overflow-hidden pointer-events-auto text-sm font-sans"
       style={{
-        position: 'fixed',
         top: `${adjustedPosition.y}px`,
         left: `${adjustedPosition.x}px`,
-        zIndex: 999999,
-        background: 'white',
-        border: '1px solid #ccc',
-        borderRadius: '4px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-        minWidth: '150px',
-        maxWidth: '200px',
-        overflow: 'hidden',
-        pointerEvents: 'auto',
-        fontSize: '14px',
-        fontFamily: 'system-ui, -apple-system, sans-serif'
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -107,23 +96,11 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }) => {
             item.onClick();
             onClose();
           }}
-          style={{
-            display: 'block',
-            width: '100%',
-            textAlign: 'left',
-            padding: '10px 14px',
-            background: 'transparent',
-            border: 'none',
-            color: item.danger ? '#ef4444' : 'var(--text-primary)',
-            cursor: 'pointer',
-            fontSize: '0.875rem'
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-secondary)';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-          }}
+          className={`block w-full text-left px-3.5 py-2.5 bg-transparent border-none cursor-pointer text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
+            item.danger 
+              ? 'text-red-500 dark:text-red-400' 
+              : 'text-gray-900 dark:text-gray-100'
+          }`}
         >
           {item.label}
         </button>

@@ -324,114 +324,35 @@ const ClipboardPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col" style={{ background: 'var(--bg-secondary)' }}>
+    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div style={{ 
-        background: 'var(--bg-primary)', 
-        borderBottom: '1px solid var(--border-color)',
-        padding: '24px 32px',
-        boxShadow: 'var(--shadow)'
-      }}>
-        <h2 style={{ 
-          fontSize: '1.5rem', 
-          fontWeight: '700', 
-          margin: '0',
-          color: 'var(--text-primary)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-8 shadow-lg">
+        <h2 className="text-2xl font-bold m-0 text-gray-900 dark:text-gray-100 flex items-center gap-3">
           <ClipboardCheck size={28} /> 클립보드 관리
         </h2>
-        <p style={{ 
-          fontSize: '0.875rem', 
-          color: 'var(--text-secondary)', 
-          margin: '8px 0 0 0' 
-        }}>
-          텍스트와 이미지를 저장하고 관리하세요 · <kbd style={{ 
-            padding: '2px 6px', 
-            background: 'var(--bg-secondary)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '4px',
-            fontSize: '0.75rem',
-            fontFamily: 'monospace'
-          }}>Ctrl+V</kbd> 빠른 추가 · <kbd style={{ 
-            padding: '2px 6px', 
-            background: 'var(--bg-secondary)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '4px',
-            fontSize: '0.75rem',
-            fontFamily: 'monospace'
-          }}>Ctrl+Z</kbd> 되돌리기 · <kbd style={{ 
-            padding: '2px 6px', 
-            background: 'var(--bg-secondary)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '4px',
-            fontSize: '0.75rem',
-            fontFamily: 'monospace'
-          }}>Backspace</kbd> 삭제 · <kbd style={{ 
-            padding: '2px 6px', 
-            background: 'var(--bg-secondary)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '4px',
-            fontSize: '0.75rem',
-            fontFamily: 'monospace'
-          }}>Enter</kbd> 텍스트 추가
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 mb-0">
+          텍스트와 이미지를 저장하고 관리하세요 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Ctrl+V</kbd> 빠른 추가 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Ctrl+Z</kbd> 되돌리기 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Backspace</kbd> 삭제 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Enter</kbd> 텍스트 추가
         </p>
       </div>
 
       {/* Split Pane Layout */}
       <div className="flex-1 grid grid-cols-2 gap-0" style={{ height: 'calc(100vh - 140px)' }}>
         {/* Left Pane: Clipboard Items List */}
-        <div className="flex flex-col h-full overflow-hidden p-6" style={{ background: 'var(--bg-secondary)' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
-            marginBottom: '20px' 
-          }}>
-            <h3 style={{ 
-              fontSize: '1.125rem', 
-              fontWeight: '600', 
-              margin: '0',
-              color: 'var(--text-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
+        <div className="flex flex-col h-full overflow-hidden p-6 bg-gray-50 dark:bg-gray-900">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-lg font-semibold m-0 text-gray-900 dark:text-gray-100 flex items-center gap-2">
               <Inbox size={20} /> 저장된 항목 ({clipboardItems.length})
             </h3>
           </div>
           
           <div className="flex-1 overflow-y-auto">
             {clipboardItems.length === 0 ? (
-              <div style={{
-                background: 'var(--bg-primary)',
-                borderRadius: 'var(--border-radius)',
-                boxShadow: 'var(--shadow)',
-                border: '1px solid var(--border-color)',
-                padding: '64px',
-                textAlign: 'center',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Inbox size={80} style={{ marginBottom: '16px', color: 'var(--text-secondary)' }} />
-                <p style={{ 
-                  color: 'var(--text-secondary)', 
-                  fontSize: '1.125rem', 
-                  fontWeight: '500',
-                  margin: '0 0 8px 0'
-                }}>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-16 text-center h-full flex flex-col items-center justify-center">
+                <Inbox size={80} className="mb-4 text-gray-400 dark:text-gray-500" />
+                <p className="text-lg font-medium m-0 mb-2 text-gray-600 dark:text-gray-400">
                   저장된 클립보드 항목이 없습니다
                 </p>
-                <p style={{ 
-                  color: 'var(--text-secondary)', 
-                  fontSize: '0.875rem',
-                  margin: '0'
-                }}>
+                <p className="text-sm m-0 text-gray-500 dark:text-gray-500">
                   아래에서 텍스트나 이미지를 추가해보세요
                 </p>
               </div>
@@ -440,39 +361,23 @@ const ClipboardPage: React.FC = () => {
                 {clipboardItems.map((item) => (
                   <div 
                     key={item.id} 
-                    style={{
-                      background: 'var(--bg-primary)',
-                      borderRadius: 'var(--border-radius)',
-                      boxShadow: 'var(--shadow)',
-                      border: selectedItems.includes(item.id) ? '2px solid var(--primary-color)' : '1px solid var(--border-color)',
-                      overflow: 'hidden',
-                      transition: 'var(--transition)',
-                      cursor: 'pointer'
-                    }}
-                    className="clipboard-card hover:shadow-lg"
+                    className={`bg-white dark:bg-gray-800 rounded-lg shadow-md border overflow-hidden transition-all duration-200 cursor-pointer hover:shadow-lg ${
+                      selectedItems.includes(item.id) 
+                        ? 'border-blue-500 ring-2 ring-blue-100 dark:ring-blue-900/50' 
+                        : 'border-gray-200 dark:border-gray-700'
+                    }`}
                     onClick={() => setActiveItem(item)}
                   >
                     {/* Header */}
                     <div 
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '12px 16px',
-                        borderBottom: '1px solid var(--border-color)',
-                        cursor: 'pointer'
-                      }}
+                      className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700 cursor-pointer"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleCardHeaderClick(item.id, e);
                       }}
                     >
                       {/* Timestamp - Left */}
-                      <div style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)',
-                        fontWeight: '500'
-                      }}>
+                      <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
                         {item.timestamp.toLocaleString('ko-KR', { 
                           month: 'short', 
                           day: 'numeric', 
@@ -482,41 +387,17 @@ const ClipboardPage: React.FC = () => {
                       </div>
                       
                       {/* Action buttons - Right */}
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div className="flex gap-2">
                         <button
                           onClick={() => copyToClipboard(item.content, item.type)}
-                          style={{
-                            padding: '4px',
-                            background: 'none',
-                            color: 'var(--text-secondary)',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'var(--transition)'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--primary-color)'}
-                          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                          className="p-1 bg-transparent text-gray-500 dark:text-gray-400 border-none cursor-pointer flex items-center justify-center transition-colors hover:text-blue-500"
                           title="복사"
                         >
                           <Clipboard2 size={16} />
                         </button>
                         <button
                           onClick={() => deleteItem(item.id)}
-                          style={{
-                            padding: '4px',
-                            background: 'none',
-                            color: 'var(--text-secondary)',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'var(--transition)'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                          className="p-1 bg-transparent text-gray-500 dark:text-gray-400 border-none cursor-pointer flex items-center justify-center transition-colors hover:text-red-500"
                           title="삭제"
                         >
                           <Trash3 size={16} />
@@ -525,49 +406,22 @@ const ClipboardPage: React.FC = () => {
                     </div>
                     
                     {/* Content */}
-                    <div style={{ padding: '16px' }}>
-                      <div style={{
-                        minHeight: '150px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'var(--bg-secondary)',
-                        borderRadius: '8px',
-                        overflow: 'hidden'
-                      }}>
+                    <div className="p-4">
+                      <div className="min-h-[150px] flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden">
                         {item.type === 'image' ? (
                           <img 
                             src={item.content} 
                             alt="Clipboard item" 
-                            style={{
-                              maxWidth: '100%',
-                              maxHeight: '200px',
-                              objectFit: 'contain'
-                            }}
+                            className="max-w-full max-h-[200px] object-contain"
                           />
                         ) : item.type === 'pdf' ? (
-                          <div style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '20px',
-                            gap: '12px'
-                          }}>
-                            <FileEarmarkPdf size={48} style={{ color: '#dc2626' }} />
-                            <div style={{
-                              textAlign: 'center',
-                              fontSize: '0.875rem',
-                              color: 'var(--text-primary)',
-                              fontWeight: '500'
-                            }}>
+                          <div className="flex flex-col items-center justify-center p-5 gap-3">
+                            <FileEarmarkPdf size={48} className="text-red-500" />
+                            <div className="text-center text-sm text-gray-900 dark:text-gray-100 font-medium">
                               {item.fileName || 'PDF 파일'}
                             </div>
                             {item.fileSize && (
-                              <div style={{
-                                fontSize: '0.75rem',
-                                color: 'var(--text-secondary)'
-                              }}>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">
                                 {(item.fileSize / 1024 / 1024).toFixed(2)} MB
                               </div>
                             )}
@@ -576,31 +430,7 @@ const ClipboardPage: React.FC = () => {
                           <textarea
                             value={item.content}
                             onChange={(e) => updateItemContent(item.id, e.target.value)}
-                            style={{
-                              width: '100%',
-                              minHeight: '150px',
-                              padding: '12px',
-                              color: 'var(--text-primary)',
-                              fontSize: '0.875rem',
-                              wordBreak: 'break-word',
-                              whiteSpace: 'pre-wrap',
-                              maxHeight: '200px',
-                              resize: 'vertical',
-                              background: 'transparent',
-                              border: 'none',
-                              outline: 'none',
-                              fontFamily: 'inherit',
-                              lineHeight: '1.5'
-                            }}
-                            onFocus={(e) => {
-                              e.target.style.background = 'var(--bg-primary)';
-                              e.target.style.border = '1px solid var(--border-color)';
-                              e.target.style.borderRadius = '6px';
-                            }}
-                            onBlur={(e) => {
-                              e.target.style.background = 'transparent';
-                              e.target.style.border = 'none';
-                            }}
+                            className="w-full min-h-[150px] p-3 text-gray-900 dark:text-gray-100 text-sm break-words whitespace-pre-wrap max-h-[200px] resize-vertical bg-transparent border-none outline-none font-inherit leading-relaxed focus:bg-white dark:focus:bg-gray-800 focus:border focus:border-gray-300 dark:focus:border-gray-600 focus:rounded-lg transition-colors"
                           />
                         )}
                       </div>
@@ -613,76 +443,35 @@ const ClipboardPage: React.FC = () => {
         </div>
 
         {/* Right Pane: Detail View */}
-        <div className="flex flex-col h-full overflow-hidden p-6" style={{ background: 'var(--bg-primary)' }}>
+        <div className="flex flex-col h-full overflow-hidden p-6 bg-white dark:bg-gray-800">
           {activeItem ? (
             <div className="flex flex-col h-full">
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between', 
-                marginBottom: '20px',
-                paddingBottom: '16px',
-                borderBottom: '1px solid var(--border-color)'
-              }}>
-                <h3 style={{ 
-                  fontSize: '1.125rem', 
-                  fontWeight: '600', 
-                  margin: '0',
-                  color: 'var(--text-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
+              <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold m-0 text-gray-900 dark:text-gray-100 flex items-center gap-2">
                   <FileText size={20} /> 항목 상세보기
                 </h3>
                 <button
                   onClick={() => setActiveItem(null)}
-                  style={{
-                    padding: '8px 12px',
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-secondary)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '6px',
-                    fontSize: '0.875rem',
-                    cursor: 'pointer'
-                  }}
+                  className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md cursor-pointer transition-colors hover:bg-gray-200 dark:hover:bg-gray-600 text-sm"
                 >
                   닫기
                 </button>
               </div>
 
               <div className="flex-1 overflow-y-auto">
-                <div style={{
-                  background: 'var(--bg-secondary)',
-                  borderRadius: 'var(--border-radius)',
-                  padding: '20px',
-                  border: '1px solid var(--border-color)'
-                }}>
-                  <div style={{ marginBottom: '16px' }}>
-                    <span style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-secondary)',
-                      background: 'var(--bg-primary)',
-                      padding: '4px 8px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--border-color)'
-                    }}>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-5 border border-gray-200 dark:border-gray-700">
+                  <div className="mb-4">
+                    <span className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded-full border border-gray-300 dark:border-gray-600">
                       {activeItem.timestamp.toLocaleString('ko-KR')}
                     </span>
                   </div>
 
                   {activeItem.type === 'image' ? (
-                    <div style={{ textAlign: 'center' }}>
+                    <div className="text-center">
                       <img 
                         src={activeItem.content} 
                         alt="Clipboard item" 
-                        style={{
-                          maxWidth: '100%',
-                          maxHeight: '400px',
-                          objectFit: 'contain',
-                          borderRadius: '8px',
-                          boxShadow: 'var(--shadow)'
-                        }}
+                        className="max-w-full max-h-[400px] object-contain rounded-lg shadow-lg"
                       />
                     </div>
                   ) : activeItem.type === 'pdf' ? (
@@ -698,46 +487,14 @@ const ClipboardPage: React.FC = () => {
                         setActiveItem(updatedItem);
                         updateItemContent(activeItem.id, e.target.value);
                       }}
-                      style={{
-                        width: '100%',
-                        minHeight: '300px',
-                        padding: '16px',
-                        color: 'var(--text-primary)',
-                        fontSize: '0.875rem',
-                        wordBreak: 'break-word',
-                        whiteSpace: 'pre-wrap',
-                        background: 'var(--bg-primary)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '8px',
-                        outline: 'none',
-                        fontFamily: 'inherit',
-                        lineHeight: '1.5',
-                        resize: 'vertical'
-                      }}
+                      className="w-full min-h-72 p-4 text-gray-900 dark:text-gray-100 text-sm break-words whitespace-pre-wrap bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg outline-none font-inherit leading-relaxed resize-vertical"
                     />
                   )}
 
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: '12px', 
-                    marginTop: '20px',
-                    justifyContent: 'flex-end'
-                  }}>
+                  <div className="flex gap-3 mt-5 justify-end">
                     <button
                       onClick={() => activeItem && copyToClipboard(activeItem.content, activeItem.type)}
-                      style={{
-                        padding: '8px 16px',
-                        background: 'var(--primary-color)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '0.875rem',
-                        fontWeight: '500',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white border-none rounded-md text-sm font-medium cursor-pointer hover:bg-blue-600"
                     >
                       <Clipboard2 size={16} /> 복사
                     </button>
@@ -747,19 +504,7 @@ const ClipboardPage: React.FC = () => {
                         deleteItem(activeItem.id);
                         setActiveItem(null);
                       }}
-                      style={{
-                        padding: '8px 16px',
-                        background: '#ef4444',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '0.875rem',
-                        fontWeight: '500',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white border-none rounded-md text-sm font-medium cursor-pointer hover:bg-red-600"
                     >
                       <Trash3 size={16} /> 삭제
                     </button>
@@ -776,20 +521,11 @@ const ClipboardPage: React.FC = () => {
               height: '100%',
               textAlign: 'center'
             }}>
-              <FileText size={64} style={{ marginBottom: '16px', color: 'var(--text-secondary)' }} />
-              <p style={{ 
-                color: 'var(--text-secondary)', 
-                fontSize: '1.125rem', 
-                fontWeight: '500',
-                margin: '0 0 8px 0'
-              }}>
+              <FileText size={64} className="mb-4 text-gray-400 dark:text-gray-500" />
+              <p className="text-lg font-medium m-0 mb-2 text-gray-600 dark:text-gray-400">
                 항목을 선택하세요
               </p>
-              <p style={{ 
-                color: 'var(--text-secondary)', 
-                fontSize: '0.875rem',
-                margin: '0'
-              }}>
+              <p className="text-sm m-0 text-gray-500 dark:text-gray-500">
                 왼쪽 목록에서 항목을 클릭하면 상세 내용을 볼 수 있습니다
               </p>
             </div>
@@ -798,13 +534,8 @@ const ClipboardPage: React.FC = () => {
       </div>
 
       {/* Add new item section - Bottom */}
-      <div style={{
-        background: 'var(--bg-primary)',
-        borderTop: '1px solid var(--border-color)',
-        boxShadow: 'var(--shadow-lg)',
-        padding: '16px 32px'
-      }}>
-        <div style={{ display: 'flex', gap: '12px', maxWidth: '1400px', margin: '0 auto' }}>
+      <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg p-4 px-8">
+        <div className="flex gap-3 max-w-[1400px] mx-auto">
           <textarea
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
@@ -815,43 +546,13 @@ const ClipboardPage: React.FC = () => {
               }
             }}
             placeholder="여기에 텍스트를 입력하세요..."
-            style={{
-              flex: 1,
-              minHeight: '80px',
-              resize: 'none',
-              padding: '12px',
-              borderRadius: '8px',
-              border: '1px solid var(--border-color)',
-              background: 'var(--bg-secondary)',
-              color: 'var(--text-primary)',
-              fontSize: '0.875rem',
-              fontFamily: 'inherit',
-              outline: 'none',
-              transition: 'var(--transition)'
-            }}
-            onFocus={(e) => e.target.style.borderColor = 'var(--primary-color)'}
-            onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+            className="flex-1 min-h-20 resize-none p-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm font-inherit outline-none transition-colors focus:border-blue-500"
           />
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="flex flex-col gap-2">
             <button 
               onClick={addTextItem} 
-              style={{
-                padding: '10px 24px',
-                background: 'linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.875rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                transition: 'var(--transition)'
-              }}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white border-none rounded-lg text-sm font-semibold cursor-pointer whitespace-nowrap hover:from-blue-600 hover:to-blue-700 transition-all"
             >
               <FileText size={16} /> 텍스트 추가
             </button>
@@ -865,22 +566,7 @@ const ClipboardPage: React.FC = () => {
             />
             <label 
               htmlFor="imageUploadFull" 
-              style={{
-                padding: '10px 24px',
-                background: 'linear-gradient(135deg, var(--accent-color) 0%, #0891b2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.875rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                transition: 'var(--transition)'
-              }}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white border-none rounded-lg text-sm font-semibold cursor-pointer whitespace-nowrap hover:from-cyan-600 hover:to-cyan-700 transition-all"
             >
               <Image size={16} /> 이미지 추가
             </label>
@@ -894,22 +580,7 @@ const ClipboardPage: React.FC = () => {
             />
             <label 
               htmlFor="pdfUploadFull" 
-              style={{
-                padding: '10px 24px',
-                background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '0.875rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                transition: 'var(--transition)'
-              }}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white border-none rounded-lg text-sm font-semibold cursor-pointer whitespace-nowrap hover:from-red-600 hover:to-red-700 transition-all"
             >
               <FileEarmarkPdf size={16} /> PDF 추가
             </label>

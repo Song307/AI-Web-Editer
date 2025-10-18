@@ -1,6 +1,4 @@
 import React from 'react';
-import './Settings.css';
-import './Settings.css';
 
 interface SettingsProps {
   isDarkMode: boolean;
@@ -39,33 +37,45 @@ const Settings: React.FC<SettingsProps> = ({
   const t = texts[language];
 
   return (
-    <div className="settings">
-      <h2>{t.title}</h2>
+    <div className="p-6 h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
+      <h2 className="mb-6 text-3xl font-bold text-gray-900 dark:text-gray-100">{t.title}</h2>
 
-      <div className="setting-group">
-        <h3>{t.theme}</h3>
-        <div className="theme-toggle-container">
+      <div className="mb-8 p-5 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">{t.theme}</h3>
+        <div className="flex items-center">
           <button
             onClick={onToggleTheme}
-            className={`theme-toggle-btn ${isDarkMode ? 'dark' : 'light'}`}
+            className={`px-6 py-3 border-2 rounded-xl font-semibold cursor-pointer transition-all duration-300 flex items-center gap-2 ${
+              isDarkMode
+                ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white border-indigo-500 shadow-lg transform -translate-y-0.5'
+                : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 hover:border-indigo-500 hover:shadow-md hover:transform hover:-translate-y-0.5'
+            }`}
           >
             {isDarkMode ? '☀️ ' + t.lightMode : '🌙 ' + t.darkMode}
           </button>
         </div>
       </div>
 
-      <div className="setting-group">
-        <h3>{t.language}</h3>
-        <div className="language-selector">
+      <div className="mb-8 p-5 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">{t.language}</h3>
+        <div className="flex gap-3">
           <button
             onClick={() => onLanguageChange('ko')}
-            className={`language-btn ${language === 'ko' ? 'active' : ''}`}
+            className={`flex-1 px-4 py-3 border-2 rounded-xl font-medium cursor-pointer transition-all duration-300 flex items-center justify-center gap-2 ${
+              language === 'ko'
+                ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white border-indigo-500 shadow-lg transform -translate-y-0.5'
+                : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 hover:border-indigo-500 hover:shadow-md hover:transform hover:-translate-y-0.5'
+            }`}
           >
             🇰🇷 {t.korean}
           </button>
           <button
             onClick={() => onLanguageChange('en')}
-            className={`language-btn ${language === 'en' ? 'active' : ''}`}
+            className={`flex-1 px-4 py-3 border-2 rounded-xl font-medium cursor-pointer transition-all duration-300 flex items-center justify-center gap-2 ${
+              language === 'en'
+                ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white border-indigo-500 shadow-lg transform -translate-y-0.5'
+                : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 hover:border-indigo-500 hover:shadow-md hover:transform hover:-translate-y-0.5'
+            }`}
           >
             🇺🇸 {t.english}
           </button>

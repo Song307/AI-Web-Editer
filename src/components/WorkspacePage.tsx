@@ -587,28 +587,12 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
       {filteredAndSortedDocuments.map((doc) => (
         <div
           key={doc.id}
-          className="document-card group"
-          style={{
-            background: 'var(--bg-primary)',
-            borderRadius: 'var(--border-radius)',
-            boxShadow: 'var(--shadow)',
-            border: '1px solid var(--border-color)',
-            overflow: 'hidden',
-            transition: 'var(--transition)',
-            cursor: 'pointer'
-          }}
+          className="document-card group bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-200 cursor-pointer hover:shadow-lg hover:scale-105"
           onClick={() => onDocumentSelect?.(doc.id)}
         >
           {/* Document Icon */}
-          <div style={{
-            padding: '24px',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            background: 'var(--bg-secondary)',
-            borderBottom: '1px solid var(--border-color)'
-          }}>
-            <FileText size={48} style={{ color: 'var(--primary-color)' }} />
+          <div className="p-6 flex justify-center items-center bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+            <FileText size={48} className="text-blue-600 dark:text-blue-400" />
           </div>
           {/* 이름 변경 모달 */}
           <RenameModal
@@ -644,31 +628,16 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
           />
 
           {/* Document Info */}
-          <div style={{ padding: '16px' }}>
-            <h3 style={{
-              fontSize: '0.875rem',
-              fontWeight: '600',
-              margin: '0 0 8px 0',
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>
+          <div className="p-4">
+            <h3 className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100 overflow-hidden text-ellipsis whitespace-nowrap">
               {doc.title}
             </h3>
 
-            <div style={{
-              fontSize: '0.75rem',
-              color: 'var(--text-secondary)',
-              marginBottom: '8px'
-            }}>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
               {formatFileSize(doc.content)}
             </div>
 
-            <div style={{
-              fontSize: '0.75rem',
-              color: 'var(--text-secondary)'
-            }}>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
               {new Date(doc.updatedAt).toLocaleString('ko-KR', {
                 year: 'numeric',
                 month: 'short',
@@ -680,31 +649,13 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
           </div>
 
           {/* Hover Actions */}
-          <div className="document-actions" style={{
-            position: 'absolute',
-            top: '8px',
-            right: '8px',
-            display: 'flex',
-            gap: '4px',
-            opacity: 0,
-            transition: 'opacity 0.2s ease'
-          }}>
+          <div className="document-actions absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleRenameStart(doc);
               }}
-              style={{
-                padding: '6px',
-                background: 'var(--bg-primary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '4px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
+              className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
               title="이름 변경"
             >
               <Pencil size={14} />
@@ -714,20 +665,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                 e.stopPropagation();
                 handleDelete(doc.id);
               }}
-              style={{
-                padding: '6px',
-                background: 'var(--bg-primary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '4px',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
+              className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 cursor-pointer flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400"
               title="삭제"
-              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
             >
               <Trash3 size={14} />
             </button>
@@ -738,26 +677,9 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
   );
 
   const ListView = () => (
-    <div style={{
-      background: 'var(--bg-primary)',
-      borderRadius: 'var(--border-radius)',
-      border: '1px solid var(--border-color)',
-      overflow: 'hidden'
-    }}>
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
       {/* List Header */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 120px 120px 80px',
-        gap: '16px',
-        padding: '12px 20px',
-        background: 'var(--bg-secondary)',
-        borderBottom: '1px solid var(--border-color)',
-        fontSize: '0.75rem',
-        fontWeight: '600',
-        color: 'var(--text-secondary)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em'
-      }}>
+      <div className="grid grid-cols-[1fr_120px_120px_80px] gap-4 px-5 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
         <div>이름</div>
         <div>크기</div>
         <div>수정일</div>
@@ -768,49 +690,26 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
       {filteredAndSortedDocuments.map((doc) => (
         <div
           key={doc.id}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 120px 120px 80px',
-            gap: '16px',
-            padding: '16px 20px',
-            borderBottom: '1px solid var(--border-color)',
-            cursor: 'pointer',
-            transition: 'var(--transition)',
-            alignItems: 'center'
-          }}
+          className="grid grid-cols-[1fr_120px_120px_80px] gap-4 px-5 py-4 border-b border-gray-200 dark:border-gray-600 cursor-pointer transition-colors duration-200 hover:bg-gray-50 dark:hover:bg-gray-700 items-center"
           onClick={() => onDocumentSelect?.(doc.id)}
-          onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
         >
           {/* Name */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <FileText size={20} style={{ color: 'var(--primary-color)' }} />
+          <div className="flex items-center gap-3">
+            <FileText size={20} className="text-blue-600 dark:text-blue-400" />
             <div>
-              <div style={{
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                color: 'var(--text-primary)',
-                marginBottom: '2px'
-              }}>
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
                 {doc.title}
               </div>
-              
             </div>
           </div>
 
           {/* Size */}
-          <div style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-secondary)'
-          }}>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             {formatFileSize(doc.content)}
           </div>
 
           {/* Date */}
-          <div style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-secondary)'
-          }}>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             {new Date(doc.updatedAt).toLocaleString('ko-KR', {
               month: 'short',
               day: 'numeric',
@@ -820,20 +719,13 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
           </div>
 
           {/* Actions */}
-          <div style={{ display: 'flex', gap: '4px' }}>
+          <div className="flex gap-1">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleRenameStart(doc);
               }}
-              style={{
-                padding: '4px',
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                borderRadius: '4px'
-              }}
+              className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded cursor-pointer"
               title="이름 변경"
             >
               <Pencil size={14} />
@@ -843,17 +735,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                 e.stopPropagation();
                 handleDelete(doc.id);
               }}
-              style={{
-                padding: '4px',
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                borderRadius: '4px'
-              }}
+              className="p-1 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded cursor-pointer"
               title="삭제"
-              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
             >
               <Trash3 size={14} />
             </button>
@@ -864,96 +747,58 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
   );
 
   return (
-    <div className="h-full flex flex-col" style={{ background: 'var(--bg-secondary)' }}>
+    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div style={{
-        padding: '20px',
-        background: 'var(--bg-primary)',
-        borderBottom: '1px solid var(--border-color)'
-      }}>
+      <div className="p-5 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: '20px'
         }}>
-          <h1 style={{
-            fontSize: '1.5rem',
-            fontWeight: 'bold',
-            color: 'var(--text-primary)',
-            margin: 0
-          }}>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 m-0">
             작업 공간
           </h1>
 
             {/* View Mode Toggle */}
           <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => setViewMode('grid')}
-                style={{
-                padding: '8px',
-                background: viewMode === 'grid' ? 'var(--primary-color)' : 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '6px',
-                color: viewMode === 'grid' ? 'white' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                justifyContent: 'center'
-                }}
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded-md border transition-colors flex items-center justify-center ${
+                viewMode === 'grid'
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
               title="그리드 보기"
-              >
-                <Grid size={16} />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                style={{
-                padding: '8px',
-                background: viewMode === 'list' ? 'var(--primary-color)' : 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '6px',
-                color: viewMode === 'list' ? 'white' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                justifyContent: 'center'
-                }}
+            >
+              <Grid size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-md border transition-colors flex items-center justify-center ${
+                viewMode === 'list'
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
               title="리스트 보기"
-              >
-                <List size={16} />
-              </button>
-              <button
-                onClick={() => setViewMode('tree')}
-                style={{
-                padding: '8px',
-                background: viewMode === 'tree' ? 'var(--primary-color)' : 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '6px',
-                color: viewMode === 'tree' ? 'white' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                justifyContent: 'center'
-                }}
+            >
+              <List size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('tree')}
+              className={`p-2 rounded-md border transition-colors flex items-center justify-center ${
+                viewMode === 'tree'
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
               title="트리 보기"
-              >
-                <Folder size={16} />
-              </button>
+            >
+              <Folder size={16} />
+            </button>
               {viewMode === 'tree' && (
                 <button
                   onClick={() => setShowNewFolderModal(true)}
-                  style={{
-                    padding: '8px 12px',
-                    background: 'var(--primary-color)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '6px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '0.875rem'
-                  }}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 border border-gray-300 dark:border-gray-600 rounded-md text-white cursor-pointer flex items-center gap-1 text-sm transition-colors"
                   title="새 폴더 만들기"
                 >
                   <Plus size={14} />
@@ -964,117 +809,66 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
         </div>
 
         {/* Tabs */}
-        <div style={{
-          display: 'flex',
-          gap: '4px',
-          marginBottom: '20px',
-          borderBottom: '1px solid var(--border-color)',
-          paddingBottom: '12px'
-        }}>
+        <div className="flex gap-1 mb-5 border-b border-gray-200 dark:border-gray-700 pb-3">
           <button
             onClick={() => setActiveTab('all')}
-            style={{
-              padding: '8px 16px',
-              background: activeTab === 'all' ? 'var(--primary-color)' : 'transparent',
-              border: 'none',
-              borderRadius: '6px',
-              color: activeTab === 'all' ? 'white' : 'var(--text-secondary)',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              fontWeight: '500'
-            }}
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+              activeTab === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
           >
             전체보기
           </button>
           <button
             onClick={() => setActiveTab('documents')}
-            style={{
-              padding: '8px 16px',
-              background: activeTab === 'documents' ? 'var(--primary-color)' : 'transparent',
-              border: 'none',
-              borderRadius: '6px',
-              color: activeTab === 'documents' ? 'white' : 'var(--text-secondary)',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              fontWeight: '500'
-            }}
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+              activeTab === 'documents'
+                ? 'bg-blue-600 text-white'
+                : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
           >
             문서
           </button>
           <button
             onClick={() => setActiveTab('images')}
-            style={{
-              padding: '8px 16px',
-              background: activeTab === 'images' ? 'var(--primary-color)' : 'transparent',
-              border: 'none',
-              borderRadius: '6px',
-              color: activeTab === 'images' ? 'white' : 'var(--text-secondary)',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              fontWeight: '500'
-            }}
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+              activeTab === 'images'
+                ? 'bg-blue-600 text-white'
+                : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
           >
             이미지
           </button>
           <button
             onClick={() => setActiveTab('pdfs')}
-            style={{
-              padding: '8px 16px',
-              background: activeTab === 'pdfs' ? 'var(--primary-color)' : 'transparent',
-              border: 'none',
-              borderRadius: '6px',
-              color: activeTab === 'pdfs' ? 'white' : 'var(--text-secondary)',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              fontWeight: '500'
-            }}
+            className={`px-4 py-2 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+              activeTab === 'pdfs'
+                ? 'bg-blue-600 text-white'
+                : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
           >
             PDF
           </button>
         </div>
 
         {/* Search and Sort Controls */}
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          alignItems: 'center'
-        }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Search size={16} style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--text-secondary)'
-            }} />
+        <div className="flex gap-3 items-center">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
               placeholder="검색..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px 8px 36px',
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '6px',
-                color: 'var(--text-primary)',
-                fontSize: '0.875rem'
-              }}
+              className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 text-sm"
             />
           </div>
 
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'name' | 'date' | 'size')}
-            style={{
-              padding: '8px 12px',
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '6px',
-              color: 'var(--text-primary)',
-              fontSize: '0.875rem'
-            }}
+            className="px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 text-sm"
           >
             <option value="name">이름</option>
             <option value="date">날짜</option>
@@ -1083,14 +877,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
 
           <button
             onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-            style={{
-              padding: '8px',
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '6px',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
+            className="p-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md text-gray-600 dark:text-gray-400 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
             title={sortOrder === 'asc' ? '내림차순' : '오름차순'}
           >
             {sortOrder === 'asc' ? '↑' : '↓'}
@@ -1108,16 +895,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                 {filteredAndSortedAll.map((item) => (
                   <div
                     key={`${item.type}-${item.id}`}
-                    className="file-card group"
-                    style={{
-                      background: 'var(--bg-primary)',
-                      borderRadius: 'var(--border-radius)',
-                      boxShadow: 'var(--shadow)',
-                      border: '1px solid var(--border-color)',
-                      overflow: 'hidden',
-                      transition: 'var(--transition)',
-                      cursor: 'pointer'
-                    }}
+                    className="file-card group bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-200 cursor-pointer hover:shadow-lg"
                     onClick={() => {
                       if (item.type === 'document') onDocumentSelect?.(item.id);
                       else if (item.type === 'image') handleImageView(item);
@@ -1128,45 +906,23 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     onDragStart={(e) => handleDragStart(e, item)}
                   >
                     {/* File Icon */}
-                    <div style={{
-                      padding: '24px',
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      background: 'var(--bg-secondary)',
-                      borderBottom: '1px solid var(--border-color)'
-                    }}>
-                      {item.type === 'document' && <FileText size={48} style={{ color: 'var(--primary-color)' }} />}
-                      {item.type === 'image' && <Image size={48} style={{ color: '#10b981' }} />}
-                      {item.type === 'pdf' && <FileEarmarkPdf size={48} style={{ color: '#ef4444' }} />}
+                    <div className="p-6 flex justify-center items-center bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                      {item.type === 'document' && <FileText size={48} className="text-blue-600" />}
+                      {item.type === 'image' && <Image size={48} className="text-emerald-600" />}
+                      {item.type === 'pdf' && <FileEarmarkPdf size={48} className="text-red-500" />}
                     </div>
 
                     {/* File Info */}
-                    <div style={{ padding: '16px' }}>
-                      <h3 style={{
-                        fontSize: '0.875rem',
-                        fontWeight: '600',
-                        margin: '0 0 8px 0',
-                        color: 'var(--text-primary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
+                    <div className="p-4">
+                      <h3 className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100 overflow-hidden text-ellipsis whitespace-nowrap">
                         {item.type === 'document' ? item.title : item.name}
                       </h3>
 
-                      <div style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)',
-                        marginBottom: '8px'
-                      }}>
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                         {item.type === 'document' ? formatFileSize(item.content) : `${(item.size / 1024).toFixed(1)} KB`}
                       </div>
 
-                      <div style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)'
-                      }}>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
                         {new Date(item.type === 'document' ? item.updatedAt : item.createdAt).toLocaleString('ko-KR', {
                           year: 'numeric',
                           month: 'short',
@@ -1178,15 +934,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     </div>
 
                     {/* Hover Actions */}
-                    <div className="file-actions" style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '8px',
-                      display: 'flex',
-                      gap: '4px',
-                      opacity: 0,
-                      transition: 'opacity 0.2s ease'
-                    }}>
+                    <div className="file-actions absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-200">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1194,17 +942,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           else if (item.type === 'image') handleRenameImageStart(item);
                           else if (item.type === 'pdf') handleRenamePdfStart(item);
                         }}
-                        style={{
-                          padding: '6px',
-                          background: 'var(--bg-primary)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '4px',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
                         title="이름 변경"
                       >
                         <Pencil size={14} />
@@ -1216,20 +954,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           else if (item.type === 'image') deleteImage(item.id);
                           else if (item.type === 'pdf') deletePdf(item.id);
                         }}
-                        style={{
-                          padding: '6px',
-                          background: 'var(--bg-primary)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '4px',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-red-50 hover:text-red-500 hover:border-red-200"
                         title="삭제"
-                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
                       >
                         <Trash3 size={14} />
                       </button>
@@ -1239,26 +965,9 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
               </div>
             ) : viewMode === 'list' ? (
               /* 리스트 뷰 */
-              <div style={{
-                background: 'var(--bg-primary)',
-                borderRadius: 'var(--border-radius)',
-                border: '1px solid var(--border-color)',
-                overflow: 'hidden'
-              }}>
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 {/* List Header */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 120px 120px 80px',
-                  gap: '16px',
-                  padding: '12px 20px',
-                  background: 'var(--bg-secondary)',
-                  borderBottom: '1px solid var(--border-color)',
-                  fontSize: '0.75rem',
-                  fontWeight: '600',
-                  color: 'var(--text-secondary)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
+                <div className="grid grid-cols-[1fr_120px_120px_80px] gap-4 px-5 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                   <div>이름</div>
                   <div>크기</div>
                   <div>수정일</div>
@@ -1269,57 +978,35 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                 {filteredAndSortedAll.map((item) => (
                   <div
                     key={`${item.type}-${item.id}`}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 120px 120px 80px',
-                      gap: '16px',
-                      padding: '16px 20px',
-                      borderBottom: '1px solid var(--border-color)',
-                      cursor: 'pointer',
-                      transition: 'var(--transition)',
-                      alignItems: 'center'
-                    }}
+                    className="grid grid-cols-[1fr_120px_120px_80px] gap-4 px-5 py-4 border-b border-gray-200 dark:border-gray-600 cursor-pointer transition-all duration-200 items-center hover:bg-gray-50 dark:hover:bg-gray-700"
                     onClick={() => {
                       if (item.type === 'document') onDocumentSelect?.(item.id);
                       else if (item.type === 'image') handleImageView(item);
                       else if (item.type === 'pdf') handlePdfView(item);
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                     onContextMenu={(e) => openContextForItem(e, item)}
                     draggable
                     onDragStart={(e) => handleDragStart(e, item)}
                   >
                     {/* Name */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      {item.type === 'document' && <FileText size={20} style={{ color: 'var(--primary-color)' }} />}
-                      {item.type === 'image' && <Image size={20} style={{ color: '#10b981' }} />}
-                      {item.type === 'pdf' && <FileEarmarkPdf size={20} style={{ color: '#ef4444' }} />}
+                    <div className="flex items-center gap-3">
+                      {item.type === 'document' && <FileText size={20} className="text-blue-600" />}
+                      {item.type === 'image' && <Image size={20} className="text-emerald-600" />}
+                      {item.type === 'pdf' && <FileEarmarkPdf size={20} className="text-red-500" />}
                       <div>
-                        <div style={{
-                          fontSize: '0.875rem',
-                          fontWeight: '500',
-                          color: 'var(--text-primary)',
-                          marginBottom: '2px'
-                        }}>
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-0.5">
                           {item.type === 'document' ? item.title : item.name}
                         </div>
                       </div>
                     </div>
 
                     {/* Size */}
-                    <div style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-secondary)'
-                    }}>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
                       {item.type === 'document' ? formatFileSize(item.content) : `${(item.size / 1024).toFixed(1)} KB`}
                     </div>
 
                     {/* Date */}
-                    <div style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-secondary)'
-                    }}>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
                       {new Date(item.type === 'document' ? item.updatedAt : item.createdAt).toLocaleString('ko-KR', {
                         month: 'short',
                         day: 'numeric',
@@ -1329,7 +1016,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     </div>
 
                     {/* Actions */}
-                    <div style={{ display: 'flex', gap: '4px' }}>
+                    <div className="flex gap-1">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1337,14 +1024,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           else if (item.type === 'image') handleRenameImageStart(item);
                           else if (item.type === 'pdf') handleRenamePdfStart(item);
                         }}
-                        style={{
-                          padding: '4px',
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          borderRadius: '4px'
-                        }}
+                        className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-gray-700"
                         title="이름 변경"
                       >
                         <Pencil size={14} />
@@ -1356,17 +1036,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           else if (item.type === 'image') deleteImage(item.id);
                           else if (item.type === 'pdf') deletePdf(item.id);
                         }}
-                        style={{
-                          padding: '4px',
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          borderRadius: '4px'
-                        }}
+                        className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:bg-red-50 hover:text-red-500"
                         title="삭제"
-                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
                       >
                         <Trash3 size={14} />
                       </button>
@@ -1376,12 +1047,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
               </div>
             ) : (
               /* 트리 뷰 */
-              <div style={{
-                background: 'var(--bg-primary)',
-                borderRadius: 'var(--border-radius)',
-                border: '1px solid var(--border-color)',
-                overflow: 'hidden'
-              }}>
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 {Array.from(groupFilesByFolder(filteredAndSortedAll)).map(([folderPath, files]) => (
                   <div key={folderPath}>
                     {/* 폴더 헤더 */}
@@ -1390,37 +1056,21 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       onDragOver={(e) => handleDragOver(e, folderPath)}
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, folderPath)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '12px 16px',
-                        background: dragOverFolder === folderPath ? 'var(--primary-color)' : 'var(--bg-secondary)',
-                        borderBottom: '1px solid var(--border-color)',
-                        cursor: 'pointer',
-                        transition: 'var(--transition)'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (dragOverFolder !== folderPath) {
-                          e.currentTarget.style.background = 'var(--bg-primary)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (dragOverFolder !== folderPath) {
-                          e.currentTarget.style.background = 'var(--bg-secondary)';
-                        }
-                      }}
+                      className={`flex items-center py-3 px-4 cursor-pointer transition-all duration-200 border-b border-gray-200 dark:border-gray-600 ${
+                        dragOverFolder === folderPath
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-600'
+                      }`}
                     >
                       {expandedFolders.has(folderPath) ? (
-                        <ChevronDown size={16} style={{ color: 'var(--text-secondary)', marginRight: '8px' }} />
+                        <ChevronDown size={16} className="mr-2 text-gray-600 dark:text-gray-400" />
                       ) : (
-                        <ChevronRight size={16} style={{ color: 'var(--text-secondary)', marginRight: '8px' }} />
+                        <ChevronRight size={16} className="mr-2 text-gray-600 dark:text-gray-400" />
                       )}
-                      <Folder size={18} style={{ color: '#fbbf24', marginRight: '8px' }} />
-                      <span style={{
-                        fontSize: '0.875rem',
-                        fontWeight: '500',
-                        color: dragOverFolder === folderPath ? 'white' : 'var(--text-primary)'
-                      }}>
+                      <Folder size={18} className="mr-2 text-yellow-500" />
+                      <span className={`text-sm font-medium ${
+                        dragOverFolder === folderPath ? 'text-white' : 'text-gray-900 dark:text-gray-100'
+                      }`}>
                         {folderPath === 'root' ? '루트 폴더' : folderPath} ({files.length})
                       </span>
                     </div>
@@ -1431,46 +1081,29 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                         {files.map((item) => (
                           <div
                             key={`${item.type}-${item.id}`}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              padding: '8px 16px 8px 48px',
-                              borderBottom: '1px solid var(--border-color)',
-                              cursor: 'pointer',
-                              transition: 'var(--transition)'
-                            }}
+                            className="flex items-center py-2 px-4 pl-12 border-b border-gray-200 dark:border-gray-600 cursor-pointer transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                             onClick={() => {
                               if (item.type === 'document') onDocumentSelect?.(item.id);
                               else if (item.type === 'image') handleImageView(item);
                               else if (item.type === 'pdf') handlePdfView(item);
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                             onContextMenu={(e) => openContextForItem(e, item)}
                             draggable
                             onDragStart={(e) => handleDragStart(e, item)}
                           >
                             {/* 파일 아이콘 */}
-                            <div style={{ marginRight: '12px' }}>
-                              {item.type === 'document' && <FileText size={16} style={{ color: 'var(--primary-color)' }} />}
-                              {item.type === 'image' && <Image size={16} style={{ color: '#10b981' }} />}
-                              {item.type === 'pdf' && <FileEarmarkPdf size={16} style={{ color: '#ef4444' }} />}
+                            <div className="mr-3">
+                              {item.type === 'document' && <FileText size={16} className="text-blue-600" />}
+                              {item.type === 'image' && <Image size={16} className="text-emerald-600" />}
+                              {item.type === 'pdf' && <FileEarmarkPdf size={16} className="text-red-500" />}
                             </div>
 
                             {/* 파일 정보 */}
-                            <div style={{ flex: 1 }}>
-                              <div style={{
-                                fontSize: '0.875rem',
-                                fontWeight: '500',
-                                color: 'var(--text-primary)',
-                                marginBottom: '2px'
-                              }}>
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-0.5">
                                 {item.type === 'document' ? item.title : item.name}
                               </div>
-                              <div style={{
-                                fontSize: '0.75rem',
-                                color: 'var(--text-secondary)'
-                              }}>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">
                                 {item.type === 'document' ? formatFileSize(item.content) : `${(item.size / 1024).toFixed(1)} KB`} •
                                 {new Date(item.type === 'document' ? item.updatedAt : item.createdAt).toLocaleString('ko-KR', {
                                   month: 'short',
@@ -1490,14 +1123,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                                   else if (item.type === 'image') handleRenameImageStart(item);
                                   else if (item.type === 'pdf') handleRenamePdfStart(item);
                                 }}
-                                style={{
-                                  padding: '4px',
-                                  background: 'none',
-                                  border: 'none',
-                                  color: 'var(--text-secondary)',
-                                  cursor: 'pointer',
-                                  borderRadius: '4px'
-                                }}
+                                className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:text-blue-500 transition-colors"
                                 title="이름 변경"
                               >
                                 <Pencil size={14} />
@@ -1509,17 +1135,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                                   else if (item.type === 'image') deleteImage(item.id);
                                   else if (item.type === 'pdf') deletePdf(item.id);
                                 }}
-                                style={{
-                                  padding: '4px',
-                                  background: 'none',
-                                  border: 'none',
-                                  color: 'var(--text-secondary)',
-                                  cursor: 'pointer',
-                                  borderRadius: '4px'
-                                }}
+                                className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:text-red-500 transition-colors"
                                 title="삭제"
-                                onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
                               >
                                 <Trash3 size={14} />
                               </button>
@@ -1536,39 +1153,22 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
         )}
 
         {activeTab === 'documents' && (
-          viewMode === 'grid' ? <GridView /> : <ListView />
+          viewMode === 'grid' || viewMode === 'tree' ? <GridView /> : <ListView />
         )}
 
         {activeTab === 'images' && (
           <div>
-            {viewMode === 'grid' ? (
+            {(viewMode === 'grid' || viewMode === 'tree') ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredAndSortedImages.map((img) => (
                   <div
                     key={img.id}
-                    className="image-card group"
-                    style={{
-                      background: 'var(--bg-primary)',
-                      borderRadius: 'var(--border-radius)',
-                      boxShadow: 'var(--shadow)',
-                      border: '1px solid var(--border-color)',
-                      overflow: 'hidden',
-                      transition: 'var(--transition)',
-                      cursor: 'pointer'
-                    }}
+                    className="image-card group bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-200 cursor-pointer hover:shadow-lg"
                     onClick={() => handleImageView(img)}
                     onContextMenu={(e) => openContextForItem(e, img)}
                   >
                     {/* Image Preview */}
-                    <div style={{
-                      height: '200px',
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      background: 'var(--bg-secondary)',
-                      borderBottom: '1px solid var(--border-color)',
-                      overflow: 'hidden'
-                    }}>
+                    <div className="h-48 flex justify-center items-center bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 overflow-hidden">
                       <img
                         src={URL.createObjectURL(new Blob([img.data], { type: img.type }))}
                         alt={img.name}
@@ -1581,31 +1181,16 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
         </div>
 
                     {/* Image Info */}
-                    <div style={{ padding: '16px' }}>
-                      <h3 style={{
-                        fontSize: '0.875rem',
-                        fontWeight: '600',
-                        margin: '0 0 8px 0',
-                        color: 'var(--text-primary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
+                    <div className="p-4">
+                      <h3 className="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-100 overflow-hidden text-ellipsis whitespace-nowrap">
                         {img.name}
                       </h3>
 
-                      <div style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)',
-                        marginBottom: '8px'
-                      }}>
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                         {(img.size / 1024).toFixed(1)} KB
-      </div>
+                      </div>
 
-              <div style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)'
-                      }}>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
                         {new Date(img.createdAt).toLocaleString('ko-KR', {
                           year: 'numeric',
                           month: 'short',
@@ -1631,17 +1216,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           e.stopPropagation();
                           handleRenameImageStart(img);
                         }}
-                        style={{
-                          padding: '6px',
-                          background: 'var(--bg-primary)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '4px',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-blue-500 transition-colors"
                         title="이름 변경"
                       >
                         <Pencil size={14} />
@@ -1651,20 +1226,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           e.stopPropagation();
                           handleImageDelete(img.id);
                         }}
-                        style={{
-                          padding: '6px',
-                          background: 'var(--bg-primary)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '4px',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-red-500 transition-colors"
                         title="삭제"
-                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
                       >
                         <Trash3 size={14} />
                       </button>
@@ -1703,55 +1266,30 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                 {filteredAndSortedImages.map((img) => (
                   <div
                     key={img.id}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 120px 120px 80px',
-                      gap: '16px',
-                      padding: '16px 20px',
-                      borderBottom: '1px solid var(--border-color)',
-                      cursor: 'pointer',
-                      transition: 'var(--transition)',
-                      alignItems: 'center'
-                    }}
+                    className="grid grid-cols-[1fr_120px_120px_80px] gap-4 p-4 px-5 border-b border-gray-300 dark:border-gray-600 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors items-center"
                     onClick={() => handleImageView(img)}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                     onContextMenu={(e) => openContextForItem(e, img)}
                   >
                     {/* Name */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <Image size={20} style={{ color: '#10b981' }} />
+                    <div className="flex items-center gap-3">
+                      <Image size={20} className="text-emerald-500" />
                       <div>
-                        <div style={{
-                          fontSize: '0.875rem',
-                          fontWeight: '500',
-                          color: 'var(--text-primary)',
-                          marginBottom: '2px'
-                        }}>
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                           {img.name}
                         </div>
-                        <div style={{
-                          fontSize: '0.75rem',
-                          color: 'var(--text-secondary)'
-                        }}>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">
                           이미지
                         </div>
                       </div>
                     </div>
 
                     {/* Size */}
-                    <div style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-secondary)'
-                    }}>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
                       {(img.size / 1024).toFixed(1)} KB
                     </div>
 
                     {/* Date */}
-                    <div style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-secondary)'
-                    }}>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
                       {new Date(img.createdAt).toLocaleString('ko-KR', {
                         month: 'short',
                         day: 'numeric',
@@ -1808,62 +1346,31 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
 
         {activeTab === 'pdfs' && (
           <div>
-            {viewMode === 'grid' ? (
+            {(viewMode === 'grid' || viewMode === 'tree') ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredAndSortedPdfs.map((pdf) => (
                   <div
                     key={pdf.id}
-                    className="pdf-card group"
-                    style={{
-                      background: 'var(--bg-primary)',
-                      borderRadius: 'var(--border-radius)',
-                      boxShadow: 'var(--shadow)',
-                      border: '1px solid var(--border-color)',
-                      overflow: 'hidden',
-                      transition: 'var(--transition)',
-                      cursor: 'pointer'
-                    }}
+                    className="pdf-card group bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-200 cursor-pointer hover:shadow-lg"
                     onClick={() => handlePdfView(pdf)}
                     onContextMenu={(e) => openContextForItem(e, pdf)}
                   >
                     {/* PDF Icon */}
-                    <div style={{
-                      padding: '24px',
-                      display: 'flex',
-                justifyContent: 'center',
-                      alignItems: 'center',
-                      background: 'var(--bg-secondary)',
-                      borderBottom: '1px solid var(--border-color)'
-                    }}>
-                      <FileEarmarkPdf size={48} style={{ color: '#ef4444' }} />
+                    <div className="p-6 flex justify-center items-center bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                      <FileEarmarkPdf size={48} className="text-red-500" />
                     </div>
 
                     {/* PDF Info */}
-                    <div style={{ padding: '16px' }}>
-                <h3 style={{
-                        fontSize: '0.875rem',
-                  fontWeight: '600',
-                        margin: '0 0 8px 0',
-                  color: 'var(--text-primary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                }}>
+                    <div className="p-4">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 overflow-hidden text-ellipsis whitespace-nowrap">
                         {pdf.name}
-                </h3>
+                      </h3>
 
-                      <div style={{
-                        fontSize: '0.75rem',
-                  color: 'var(--text-secondary)',
-                        marginBottom: '8px'
-                      }}>
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                         {(pdf.size / 1024).toFixed(1)} KB
                       </div>
 
-                      <div style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--text-secondary)'
-                      }}>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
                         {new Date(pdf.createdAt).toLocaleString('ko-KR', {
                           year: 'numeric',
                           month: 'short',
@@ -1889,17 +1396,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           e.stopPropagation();
                           handleRenamePdfStart(pdf);
                         }}
-                        style={{
-                          padding: '6px',
-                          background: 'var(--bg-primary)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '4px',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-blue-500 transition-colors"
                         title="이름 변경"
                       >
                         <Pencil size={14} />
@@ -1909,20 +1406,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           e.stopPropagation();
                           handlePdfDelete(pdf.id);
                         }}
-                        style={{
-                          padding: '6px',
-                          background: 'var(--bg-primary)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '4px',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-red-500 transition-colors"
                         title="삭제"
-                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
                       >
                         <Trash3 size={14} />
                       </button>
@@ -1961,55 +1446,30 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                 {filteredAndSortedPdfs.map((pdf) => (
                   <div
                     key={pdf.id}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 120px 120px 80px',
-                      gap: '16px',
-                      padding: '16px 20px',
-                      borderBottom: '1px solid var(--border-color)',
-                      cursor: 'pointer',
-                      transition: 'var(--transition)',
-                      alignItems: 'center'
-                    }}
+                    className="grid grid-cols-[1fr_120px_120px_80px] gap-4 p-4 px-5 border-b border-gray-300 dark:border-gray-600 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors items-center"
                     onClick={() => handlePdfView(pdf)}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                     onContextMenu={(e) => openContextForItem(e, pdf)}
                   >
                     {/* Name */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <FileEarmarkPdf size={20} style={{ color: '#ef4444' }} />
-              <div>
-                        <div style={{
-                          fontSize: '0.875rem',
-                          fontWeight: '500',
-                          color: 'var(--text-primary)',
-                          marginBottom: '2px'
-                        }}>
+                    <div className="flex items-center gap-3">
+                      <FileEarmarkPdf size={20} className="text-red-500" />
+                      <div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-0.5">
                           {pdf.name}
-                </div>
-                        <div style={{
-                          fontSize: '0.75rem',
-                          color: 'var(--text-secondary)'
-                        }}>
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">
                           PDF
                         </div>
                       </div>
                     </div>
 
                     {/* Size */}
-                    <div style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-secondary)'
-                    }}>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
                       {(pdf.size / 1024).toFixed(1)} KB
                     </div>
 
                     {/* Date */}
-                    <div style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-secondary)'
-                    }}>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
                       {new Date(pdf.createdAt).toLocaleString('ko-KR', {
                         month: 'short',
                         day: 'numeric',
@@ -2019,20 +1479,13 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     </div>
 
                     {/* Actions */}
-                    <div style={{ display: 'flex', gap: '4px' }}>
+                    <div className="flex gap-1">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleRenamePdfStart(pdf);
                         }}
-                        style={{
-                          padding: '4px',
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          borderRadius: '4px'
-                        }}
+                        className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:text-blue-500 transition-colors"
                         title="이름 변경"
                       >
                         <Pencil size={14} />
@@ -2042,17 +1495,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           e.stopPropagation();
                           handlePdfDelete(pdf.id);
                         }}
-                        style={{
-                          padding: '4px',
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          borderRadius: '4px'
-                        }}
+                        className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:text-red-500 transition-colors"
                         title="삭제"
-                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
                       >
                         <Trash3 size={14} />
                       </button>

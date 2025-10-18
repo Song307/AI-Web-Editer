@@ -956,45 +956,53 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
   }
 
   return (
-    <div className="editor-container">
-      <div className="editor-header">
+    <div className="flex-1 flex flex-col relative">
+      <div className="flex items-center mb-4 gap-3 px-6 pt-5">
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="title-input"
+          className="flex-1 text-xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 outline-none transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
           placeholder="Document Title"
         />
-        <button onClick={handleSave} className="save-btn">저장</button>
+        <button onClick={handleSave} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md font-semibold cursor-pointer transition-all hover:transform hover:-translate-y-0.5">저장</button>
       </div>
-      <div className="toolbar">
+      <div className="flex flex-wrap gap-2 mb-4 mx-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
         <button
           onClick={() => editor.chain().focus().toggleBold().run()}
-          className={`btn ${editor.isActive('bold') ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor.isActive('bold') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="굵게 (Ctrl+B)"
         >
           <TypeBold size={16} />
         </button>
         <button
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          className={`btn ${editor.isActive('italic') ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor.isActive('italic') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="기울임 (Ctrl+I)"
         >
           <TypeItalic size={16} />
         </button>
         <button
           onClick={() => editor.chain().focus().toggleStrike().run()}
-          className={`btn ${editor.isActive('strike') ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor.isActive('strike') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="취소선"
         >
           <TypeStrikethrough size={16} />
         </button>
-        <div className="toolbar-separator"></div>
+        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
         <button
           onClick={() => {
             editor?.chain().focus().toggleHeading({ level: 1 }).run();
           }}
-          className={`btn ${editor?.isActive('heading', { level: 1 }) ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor?.isActive('heading', { level: 1 }) ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="제목 1"
         >
           <TypeH1 size={16} />
@@ -1003,7 +1011,9 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
           onClick={() => {
             editor?.chain().focus().toggleHeading({ level: 2 }).run();
           }}
-          className={`btn ${editor?.isActive('heading', { level: 2 }) ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor?.isActive('heading', { level: 2 }) ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="제목 2"
         >
           <TypeH2 size={16} />
@@ -1012,37 +1022,47 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
           onClick={() => {
             editor?.chain().focus().toggleHeading({ level: 3 }).run();
           }}
-          className={`btn ${editor?.isActive('heading', { level: 3 }) ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor?.isActive('heading', { level: 3 }) ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="제목 3"
         >
           <TypeH3 size={16} />
         </button>
-        <div className="toolbar-separator"></div>
+        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
         <button
           onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className={`btn ${editor.isActive('bulletList') ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor.isActive('bulletList') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="글머리 기호 목록"
         >
           <ListUl size={16} />
         </button>
         <button
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          className={`btn ${editor.isActive('orderedList') ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor.isActive('orderedList') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="번호 목록"
         >
           <ListOl size={16} />
         </button>
         <button
           onClick={() => editor.chain().focus().toggleTaskList().run()}
-          className={`btn ${editor.isActive('taskList') ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor.isActive('taskList') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="체크리스트"
         >
           <CheckSquare size={16} />
         </button>
-        <div className="toolbar-separator"></div>
+        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
         <button
           onClick={handleLinkInsert}
-          className={`btn ${editor.isActive('link') ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor.isActive('link') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="링크"
         >
           <Link45deg size={16} />
@@ -1052,102 +1072,106 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
             setImageUrl('');
             setShowImageUrlModal(true);
           }}
-          className="btn"
+          className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600"
           title="이미지 삽입"
         >
           <ImageIcon size={16} />
         </button>
         <button
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          className={`btn ${editor.isActive('codeBlock') ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor.isActive('codeBlock') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="코드 블록"
         >
           <Code size={16} />
         </button>
         <button
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          className={`btn ${editor.isActive('blockquote') ? 'active' : ''}`}
+          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
+            editor.isActive('blockquote') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
+          }`}
           title="인용구"
         >
           <Quote size={16} />
         </button>
         <button
           onClick={() => editor.chain().focus().setHorizontalRule().run()}
-          className="btn"
+          className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600"
           title="구분선"
         >
           <Dash size={16} />
         </button>
 
         
-        <div className="toolbar-separator"></div>
+        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
      {/* AI 버튼 바 */}
-      <div className="ai-button-bar">
-        <button onClick={handleAIResearch} className={`ai-btn ${isAiLoading ? 'loading' : ''}`} disabled={isAiLoading}>
+      <div className="flex gap-2">
+        <button onClick={handleAIResearch} className={`px-3 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-md text-sm font-medium cursor-pointer transition-all hover:from-purple-600 hover:to-purple-700 hover:transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none ${isAiLoading ? 'animate-pulse' : ''}`} disabled={isAiLoading}>
           {isAiLoading ? '🔄 연구 중...' : '연구'}
         </button>
-        <button onClick={handleAIAnalyze} className={`ai-btn ${isAiLoading ? 'loading' : ''}`} disabled={isAiLoading}>
+        <button onClick={handleAIAnalyze} className={`px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-md text-sm font-medium cursor-pointer transition-all hover:from-blue-600 hover:to-blue-700 hover:transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none ${isAiLoading ? 'animate-pulse' : ''}`} disabled={isAiLoading}>
           {isAiLoading ? '🔄 분석 중...' : '분석'}
         </button>
-        <button onClick={handleAIPersonaFeedback} className={`ai-btn ${isAiLoading ? 'loading' : ''}`} disabled={isAiLoading}>
+        <button onClick={handleAIPersonaFeedback} className={`px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-md text-sm font-medium cursor-pointer transition-all hover:from-green-600 hover:to-green-700 hover:transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none ${isAiLoading ? 'animate-pulse' : ''}`} disabled={isAiLoading}>
           {isAiLoading ? '🔄 피드백 중...' : '피드백'}
         </button>
-        <button onClick={handleAIAnswer} className={`ai-btn ${isAiLoading ? 'loading' : ''}`} disabled={isAiLoading}>
+        <button onClick={handleAIAnswer} className={`px-3 py-1.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-md text-sm font-medium cursor-pointer transition-all hover:from-orange-600 hover:to-orange-700 hover:transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none ${isAiLoading ? 'animate-pulse' : ''}`} disabled={isAiLoading}>
           {isAiLoading ? '🔄 답변 중...' : '답변'}
         </button>
       </div>
       </div>
-      <div className="editor-content-wrapper" onClick={() => editor?.commands.focus()}>
+      <div className="flex-1 cursor-text px-6" onClick={() => editor?.commands.focus()}>
         {!isEditorReady ? (
-          <div className="editor-loading">
-            <div className="loading-spinner"></div>
-            <p>에디터를 로딩 중...</p>
+          <div className="flex flex-col items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">에디터를 로딩 중...</p>
           </div>
         ) : (
-          <EditorContent editor={editor} className="editor-content" />
+          <EditorContent 
+            editor={editor} 
+            className="flex-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg py-6 min-h-[400px] overflow-y-auto focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 [&_.ProseMirror]:outline-none [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:text-sm sm:[&_.ProseMirror]:text-base [&_.ProseMirror]:max-w-none [&_.ProseMirror]:resize-none [&_.ProseMirror]:h-full [&_.ProseMirror]:border-0 [&_.ProseMirror]:focus:outline-none [&_.ProseMirror]:px-6" 
+          />
         )}
         {showSlashMenu && isEditorReady && (
           <div
-            className="slash-menu"
+            className="absolute bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg py-2 z-50 max-h-64 overflow-y-auto"
             style={{
-              position: 'absolute',
               top: slashMenuPosition.top,
               left: slashMenuPosition.left,
-              zIndex: 9999,
             }}
           >
             {slashMenuItems.map((item, index) => (
               <div
                 key={index}
-                className={`slash-menu-item ${index === selectedMenuIndex ? 'selected' : ''}`}
+                className={`flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                  index === selectedMenuIndex ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                }`}
                 onClick={() => handleSlashMenuSelect(item)}
               >
-                <span className="slash-menu-icon">{item.icon}</span>
-                <span className="slash-menu-label">{item.label}</span>
+                <span className="text-lg">{item.icon}</span>
+                <span className="text-sm font-medium">{item.label}</span>
               </div>
             ))}
           </div>
         )}
       </div>
       {isAiLoading && (
-        <div className="ai-response">
-          <h3>AI 응답 생성 중...</h3>
-          <div className="ai-response-content">
-            <div className="loading-indicator">
-              <div className="loading-spinner"></div>
-              <p>AI가 응답을 생성하고 있습니다. 잠시만 기다려주세요.</p>
-            </div>
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+            <p className="text-blue-700 dark:text-blue-300 m-0">AI가 응답을 생성하고 있습니다. 잠시만 기다려주세요.</p>
           </div>
         </div>
       )}
       {aiResponse && (
-        <div className="ai-response">
-          <h3>AI 응답:</h3>
-          <div className="ai-response-content" dangerouslySetInnerHTML={{ __html: markdownToHtml(aiResponse) }} />
-          <div className="response-actions">
-            <button onClick={applyAIResponse} className="btn" disabled={isAiLoading}>에디터에 적용</button>
-            <button onClick={copyAIResponse} className="btn" disabled={isAiLoading}>복사</button>
-            <button onClick={() => setAiResponse('')} className="btn" disabled={isAiLoading}>닫기</button>
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">
+          <h3 className="text-lg font-semibold text-green-800 dark:text-green-200 m-0 mb-3">AI 응답:</h3>
+          <div className="text-gray-700 dark:text-gray-300 mb-4 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: markdownToHtml(aiResponse) }} />
+          <div className="flex gap-2">
+            <button onClick={applyAIResponse} className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={isAiLoading}>에디터에 적용</button>
+            <button onClick={copyAIResponse} className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={isAiLoading}>복사</button>
+            <button onClick={() => setAiResponse('')} className="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={isAiLoading}>닫기</button>
           </div>
         </div>
       )}

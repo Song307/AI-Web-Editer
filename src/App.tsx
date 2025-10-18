@@ -7,7 +7,7 @@ import WorkspacePage from './components/WorkspacePage';
 import StoragePage from './components/StoragePage';
 import Settings from './components/Settings';
 import { getAllDocuments, initDB, deleteDocument, Document } from './utils/db';
-import toast, { Toaster } from 'react-hot-toast';
+import { Toaster } from 'react-hot-toast';
 import './App.css';
 
 function App() {
@@ -49,7 +49,7 @@ function AppContent() {
   }, [id]);
 
   useEffect(() => {
-    document.body.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+    document.documentElement.classList.toggle('dark', isDarkMode);
   }, [isDarkMode]);
 
   // Save theme preference to localStorage
@@ -103,174 +103,69 @@ function AppContent() {
   };
 
   return (
-    <div className="app-container">
-      <header className="header">
-        <div className="header-content">
-          <h1>{language === 'ko' ? 'AI 텍스트 편집기' : 'AI Text Editor'}</h1>
+    <div className="min-h-screen p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
+      <header className="text-center mb-8 text-gray-900 dark:text-gray-100 relative z-10">
+        <div className="flex justify-between items-center max-w-6xl mx-auto">
+          <h1 className="text-5xl font-extrabold m-0 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-purple-400 tracking-tight">
+            {language === 'ko' ? 'AI 텍스트 편집기' : 'AI Text Editor'}
+          </h1>
         </div>
       </header>
-      <div className="main-layout">
-        <aside className="sidebar">
+      <div className="grid grid-cols-[320px_1fr] gap-6 h-[calc(100vh-140px)]">
+        <aside className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 flex flex-col border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
           {/* Icon Navigation */}
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: '8px',
-            marginBottom: '24px',
-            paddingBottom: '24px',
-            borderBottom: '1px solid var(--border-color)'
-          }}>
+          <div className="flex flex-col gap-2 mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
             <button
               onClick={() => navigate('/workspace')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                background: window.location.pathname === '/workspace' ? 'var(--primary-color)' : 'transparent',
-                color: window.location.pathname === '/workspace' ? 'white' : 'var(--text-primary)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                transition: 'var(--transition)',
-                textAlign: 'left'
-              }}
-              onMouseEnter={(e) => {
-                if (window.location.pathname !== '/workspace') {
-                  e.currentTarget.style.background = 'var(--bg-secondary)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (window.location.pathname !== '/workspace') {
-                  e.currentTarget.style.background = 'transparent';
-                }
-              }}
+              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+                window.location.pathname === '/workspace'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
             >
               <Folder size={18} />
               <span>{language === 'ko' ? '워크스페이스' : 'Workspace'}</span>
             </button>
             <button
               onClick={() => navigate('/documents')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                background: (window.location.pathname.startsWith('/documents') || window.location.pathname === '/') ? 'var(--primary-color)' : 'transparent',
-                color: (window.location.pathname.startsWith('/documents') || window.location.pathname === '/') ? 'white' : 'var(--text-primary)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                transition: 'var(--transition)',
-                textAlign: 'left'
-              }}
-              onMouseEnter={(e) => {
-                if (!(window.location.pathname.startsWith('/documents') || window.location.pathname === '/')) {
-                  e.currentTarget.style.background = 'var(--bg-secondary)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!(window.location.pathname.startsWith('/documents') || window.location.pathname === '/')) {
-                  e.currentTarget.style.background = 'transparent';
-                }
-              }}
+              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+                (window.location.pathname.startsWith('/documents') || window.location.pathname === '/')
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
             >
               <FileText size={18} />
               <span>{language === 'ko' ? '문서' : 'Documents'}</span>
             </button>
             <button
               onClick={() => navigate('/clipboard')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                background: window.location.pathname === '/clipboard' ? 'var(--primary-color)' : 'transparent',
-                color: window.location.pathname === '/clipboard' ? 'white' : 'var(--text-primary)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                transition: 'var(--transition)',
-                textAlign: 'left'
-              }}
-              onMouseEnter={(e) => {
-                if (window.location.pathname !== '/clipboard') {
-                  e.currentTarget.style.background = 'var(--bg-secondary)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (window.location.pathname !== '/clipboard') {
-                  e.currentTarget.style.background = 'transparent';
-                }
-              }}
+              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+                window.location.pathname === '/clipboard'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
             >
               <ClipboardCheck size={18} />
               <span>{language === 'ko' ? '클립보드' : 'Clipboard'}</span>
             </button>
             <button
               onClick={() => navigate('/storage')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                background: window.location.pathname === '/storage' ? 'var(--primary-color)' : 'transparent',
-                color: window.location.pathname === '/storage' ? 'white' : 'var(--text-primary)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                transition: 'var(--transition)',
-                textAlign: 'left'
-              }}
-              onMouseEnter={(e) => {
-                if (window.location.pathname !== '/storage') {
-                  e.currentTarget.style.background = 'var(--bg-secondary)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (window.location.pathname !== '/storage') {
-                  e.currentTarget.style.background = 'transparent';
-                }
-              }}
+              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+                window.location.pathname === '/storage'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
             >
               <Database size={18} />
               <span>{language === 'ko' ? '저장공간' : 'Storage'}</span>
             </button>
             <button
               onClick={() => navigate('/settings')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                background: window.location.pathname === '/settings' ? 'var(--primary-color)' : 'transparent',
-                color: window.location.pathname === '/settings' ? 'white' : 'var(--text-primary)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                transition: 'var(--transition)',
-                textAlign: 'left'
-              }}
-              onMouseEnter={(e) => {
-                if (window.location.pathname !== '/settings') {
-                  e.currentTarget.style.background = 'var(--bg-secondary)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (window.location.pathname !== '/settings') {
-                  e.currentTarget.style.background = 'transparent';
-                }
-              }}
+              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+                window.location.pathname === '/settings'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
             >
               <Gear size={18} />
               <span>{language === 'ko' ? '환경설정' : 'Settings'}</span>
@@ -278,32 +173,13 @@ function AppContent() {
           </div>
           {(window.location.pathname.startsWith('/documents') || window.location.pathname === '/') && (
             <div className="document-list">
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                marginBottom: '12px'
-              }}>
-                <h2 style={{ margin: '0', fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="m-0 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                   {language === 'ko' ? '최근 문서' : 'Recent Documents'}
                 </h2>
                 <button
                   onClick={createNewDocument}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '28px',
-                    height: '28px',
-                    background: 'var(--primary-color)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    transition: 'var(--transition)'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                  className="flex items-center justify-center w-7 h-7 bg-indigo-600 text-white border-none rounded cursor-pointer transition-transform hover:scale-110"
                   title={language === 'ko' ? '새 문서' : 'New Document'}
                 >
                   <Plus size={16} />
@@ -312,7 +188,11 @@ function AppContent() {
               {documents.map((doc) => (
                 <div
                   key={doc.id}
-                  className={`document-item ${selectedDocumentId === doc.id ? 'selected' : ''}`}
+                  className={`p-4 border rounded-lg mb-3 cursor-pointer transition-all duration-300 bg-white dark:bg-gray-800 flex justify-between items-start ${
+                    selectedDocumentId === doc.id
+                      ? 'border-indigo-500 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 shadow-lg ring-2 ring-indigo-100 dark:ring-indigo-900/50'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-indigo-500 hover:shadow-md hover:transform hover:-translate-y-0.5'
+                  }`}
                 >
                   <div
                     onClick={() => {
@@ -321,8 +201,8 @@ function AppContent() {
                     }}
                     style={{ flex: 1, cursor: 'pointer' }}
                   >
-                    <div className="document-title">{doc.title}</div>
-                    <div className="document-date">
+                    <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-1">{doc.title}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
                       {new Date(doc.updatedAt).toLocaleString()}
                     </div>
                   </div>
@@ -331,20 +211,7 @@ function AppContent() {
                       e.stopPropagation();
                       handleDelete(doc.id);
                     }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      padding: '4px',
-                      borderRadius: '4px',
-                      transition: 'var(--transition)'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                    className="flex items-center justify-center bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer p-1 rounded transition-colors hover:text-red-500"
                     title={language === 'ko' ? '삭제' : 'Delete'}
                   >
                     <Trash3 size={14} />
@@ -354,7 +221,7 @@ function AppContent() {
             </div>
           )}
         </aside>
-        <main className="main-content">
+        <main className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto flex flex-col scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
           <Routes>
             <Route path="/" element={<Navigate to="/workspace" replace />} />
             <Route path="/documents" element={<Editor ref={editorRef} documentId={selectedDocumentId || undefined} onSave={handleSave} onDirtyChange={setIsDirty} />} />
@@ -387,15 +254,17 @@ function AppContent() {
         toastOptions={{
           duration: 3000,
           style: {
-            background: 'var(--bg-primary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border-color)',
+            background: isDarkMode ? '#1f2937' : '#ffffff',
+            color: isDarkMode ? '#f3f4f6' : '#111827',
+            border: `1px solid ${isDarkMode ? '#374151' : '#d1d5db'}`,
             borderRadius: '8px',
-            boxShadow: 'var(--shadow-lg)'
+            boxShadow: isDarkMode
+              ? '0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2)'
+              : '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
           },
           success: {
             iconTheme: {
-              primary: 'var(--primary-color)',
+              primary: '#10b981',
               secondary: 'white',
             },
           },

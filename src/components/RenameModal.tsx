@@ -47,72 +47,34 @@ const RenameModal: React.FC<RenameModalProps> = ({
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.4)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10000,
-      }}
+      className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
       onClick={onCancel}
     >
       <div
-        style={{
-          width: '100%',
-          maxWidth: '420px',
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '12px',
-          boxShadow: 'var(--shadow)',
-          padding: '20px',
-        }}
+        className="w-full max-w-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 style={{ margin: '0 0 12px 0', color: 'var(--text-primary)' }}>{title}</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <label style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{label}</label>
+        <h3 className="m-0 mb-3 text-gray-900 dark:text-gray-100 text-lg font-semibold">{title}</h3>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm text-gray-600 dark:text-gray-400">{label}</label>
           <input
             type="text"
             value={value}
             placeholder={placeholder}
             onChange={(e) => onChange(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px',
-              background: 'var(--bg-secondary)',
-              color: 'var(--text-primary)',
-              outline: 'none',
-            }}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+        <div className="flex justify-end gap-2 mt-4">
           <button
             onClick={onCancel}
-            style={{
-              padding: '10px 12px',
-              background: 'var(--bg-secondary)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px',
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-            }}
+            className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           >
             {cancelText}
           </button>
           <button
             onClick={onConfirm}
-            style={{
-              padding: '10px 12px',
-              background: 'var(--primary-color)',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'white',
-              cursor: 'pointer',
-            }}
+            className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white border-none rounded-md cursor-pointer transition-colors"
           >
             {confirmText}
           </button>
