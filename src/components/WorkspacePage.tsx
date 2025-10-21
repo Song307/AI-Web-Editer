@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Folder, FileText, Grid, List, Plus, Search, Trash3, Pencil, X, Image, Upload, FileEarmarkPdf, ChevronRight, ChevronDown, PlayCircle, ZoomOut, ZoomIn, ArrowRepeat, ArrowCounterclockwise, ArrowClockwise, ArrowLeft, ArrowRight, Download, Fullscreen } from  'react-bootstrap-icons';
+import { Folder, FileText, Grid, List, Plus, Search, X, Image, Upload, FileEarmarkPdf, ChevronRight, ChevronDown, PlayCircle, ZoomOut, ZoomIn, ArrowRepeat, ArrowCounterclockwise, ArrowClockwise, ArrowLeft, ArrowRight, Download, Fullscreen, ThreeDots } from  'react-bootstrap-icons';
 import toast, { Toaster } from 'react-hot-toast';
 import { getAllDocuments, deleteDocument, updateDocument, Document, getAllImages, saveImage, deleteImage, ImageFile, updateImage, PDFFile, savePdf, getAllPdfs, deletePdf, updatePdf, VideoFile, saveVideo, getAllVideos, deleteVideo, updateVideo } from '../utils/db';
-import PDFViewer from './PDFViewer';
+import PDFViewer from './tools/PDFViewer';
 import ImageViewer from './tools/ImageViewer';
-import VideoPlayer from './VideoPlayer';
-import RenameModal from './RenameModal';
-import ConfirmModal from './ConfirmModal';
-import ContextMenu, { ContextMenuItem } from './ContextMenu';
+import VideoPlayer from './tools/VideoPlayer';
+import RenameModal from './UI/shared/RenameModal';
+import ConfirmModal from './UI/shared/ConfirmModal';
+import ContextMenu, { ContextMenuItem } from './UI/shared/ContextMenu';
 import Modal from './UI/shared/Modal';
 import ModalHeader from './UI/shared/ModalHeader';
 import ModalToolbar from './UI/shared/ModalToolbar';
@@ -41,7 +41,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
   const [selectedPdf, setSelectedPdf] = useState<PDFFile | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
   const [confirmState, setConfirmState] = useState<{ open: boolean; id?: string; type?: 'document' | 'image' | 'pdf' | 'video' }>({ open: false });
-  const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; target?: any }>({ open: false, x: 0, y: 0 });
+  const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; target?: any; anchorRect?: { left: number; right: number; top: number; bottom: number; width: number; height: number } | null }>({ open: false, x: 0, y: 0, anchorRect: null });
   const pdfViewerRef = useRef<any>(null);
   const pdfModalRef = useRef<HTMLDivElement>(null);
 
@@ -334,7 +334,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
     setSelectedVideo(video);
   };
 
-  const closeContextMenu = () => setContextMenu({ open: false, x: 0, y: 0 });
+  const closeContextMenu = () => setContextMenu({ open: false, x: 0, y: 0, anchorRect: null });
 
   // 파일들을 폴더별로 그룹화하는 함수
   const groupFilesByFolder = (files: any[]) => {
@@ -438,36 +438,59 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
   };
 
   const openContextForItem = (e: React.MouseEvent, item: any) => {
-    console.log('Right-click detected!', e);
     e.preventDefault();
     e.stopPropagation();
-    const x = e.clientX;
-    const y = e.clientY;
-    console.log('Mouse click position:', { x, y, clientX: e.clientX, clientY: e.clientY });
-    setContextMenu({ open: true, x, y, target: item });
+
+    // 버튼 요소를 정확하게 찾기
+    const button = e.currentTarget as HTMLElement;
+    if (!button) return;
+
+const rect = button.getBoundingClientRect();
+
+// 조정하기 쉬운 값들 — 원하는 수치로 바꿔서 테스트하세요
+const estimatedMenuWidth = 150; // ContextMenu의 min width와 일치시키면 좋음
+const offsetX = -300;   // +이면 오른쪽으로, -이면 왼쪽으로 이동
+const offsetY = -100;   // +이면 아래로, -이면 위로 이동
+
+// 가운데 정렬 기반 (기존 방식)
+const x = rect.left + (rect.width / 2) - (estimatedMenuWidth / 2) + offsetX;
+const y = rect.bottom + offsetY;
+
+setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height } });
   };
 
-  const getContextMenuItems = (item: any): ContextMenuItem[] => {
-    if (!item) return [];
-    if (item.type === 'document' || (item as any).content !== undefined) {
+
+  const getContextMenuItems = (target: any): ContextMenuItem[] => {
+    if (!target || !target.item) return [];
+    const item = target.item;
+    const type = target.type;
+
+    if (type === 'document' || item.content !== undefined) {
       return [
         { label: '열기', onClick: () => onDocumentSelect?.(item.id) },
         { label: '이름 변경', onClick: () => handleRenameStart(item) },
         { label: '삭제', onClick: () => handleDelete(item.id), danger: true },
       ];
     }
-    if (item.type === 'image' || (item as any).data) {
+    if (type === 'image' || item.data) {
       return [
         { label: '보기', onClick: () => handleImageView(item) },
         { label: '이름 변경', onClick: () => handleRenameImageStart(item) },
         { label: '삭제', onClick: () => handleImageDelete(item.id), danger: true },
       ];
     }
-    if (item.type === 'pdf') {
+    if (type === 'pdf') {
       return [
         { label: '보기', onClick: () => handlePdfView(item) },
         { label: '이름 변경', onClick: () => handleRenamePdfStart(item) },
         { label: '삭제', onClick: () => handlePdfDelete(item.id), danger: true },
+      ];
+    }
+    if (type === 'video') {
+      return [
+        { label: '보기', onClick: () => handleVideoView(item) },
+        { label: '이름 변경', onClick: () => handleRenameVideoStart(item) },
+        { label: '삭제', onClick: () => handleVideoDelete(item.id), danger: true },
       ];
     }
     return [];
@@ -821,26 +844,16 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
           </div>
 
           {/* Hover Actions */}
-          <div className="document-actions absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <div className="document-actions absolute top-2 right-2 flex gap-1 opacity-100 transition-opacity duration-200">
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleRenameStart(doc);
+                openContextForItem(e, { type: 'document', item: doc });
               }}
               className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
-              title="이름 변경"
+              title="옵션"
             >
-              <Pencil size={14} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(doc.id);
-              }}
-              className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 cursor-pointer flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400"
-              title="삭제"
-            >
-              <Trash3 size={14} />
+              <ThreeDots size={14} />
             </button>
           </div>
         </div>
@@ -895,22 +908,12 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleRenameStart(doc);
+                openContextForItem(e, { type: 'document', ...doc });
               }}
               className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded cursor-pointer"
-              title="이름 변경"
+              title="옵션"
             >
-              <Pencil size={14} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete(doc.id);
-              }}
-              className="p-1 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded cursor-pointer"
-              title="삭제"
-            >
-              <Trash3 size={14} />
+              <ThreeDots size={14} />
             </button>
           </div>
         </div>
@@ -1089,7 +1092,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       else if (item.type === 'pdf') handlePdfView(item);
                       else if (item.type === 'video') handleVideoView(item);
                     }}
-                    onContextMenu={(e) => openContextForItem(e, item)}
                     draggable
                     onDragStart={(e) => handleDragStart(e, item)}
                   >
@@ -1123,30 +1125,16 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     </div>
 
                     {/* Hover Actions */}
-                    <div className="file-actions absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-200">
+                    <div className="file-actions absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (item.type === 'document') handleRenameStart(item);
-                          else if (item.type === 'image') handleRenameImageStart(item);
-                          else if (item.type === 'pdf') handleRenamePdfStart(item);
+                          openContextForItem(e, item);
                         }}
                         className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
-                        title="이름 변경"
+                        title="옵션"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (item.type === 'document') handleDelete(item.id);
-                          else if (item.type === 'image') deleteImage(item.id);
-                          else if (item.type === 'pdf') deletePdf(item.id);
-                        }}
-                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-red-50 hover:text-red-500 hover:border-red-200"
-                        title="삭제"
-                      >
-                        <Trash3 size={14} />
+                        <ThreeDots size={14} />
                       </button>
                     </div>
                   </div>
@@ -1172,8 +1160,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       if (item.type === 'document') onDocumentSelect?.(item.id);
                       else if (item.type === 'image') handleImageView(item);
                       else if (item.type === 'pdf') handlePdfView(item);
+                      else if (item.type === 'video') handleVideoView(item);
                     }}
-                    onContextMenu={(e) => openContextForItem(e, item)}
                     draggable
                     onDragStart={(e) => handleDragStart(e, item)}
                   >
@@ -1182,6 +1170,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       {item.type === 'document' && <FileText size={20} className="text-blue-600" />}
                       {item.type === 'image' && <Image size={20} className="text-emerald-600" />}
                       {item.type === 'pdf' && <FileEarmarkPdf size={20} className="text-red-500" />}
+                      {item.type === 'video' && <PlayCircle size={20} className="text-purple-600" />}
                       <div>
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-0.5">
                           {item.type === 'document' ? item.title : item.name}
@@ -1209,26 +1198,12 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (item.type === 'document') handleRenameStart(item);
-                          else if (item.type === 'image') handleRenameImageStart(item);
-                          else if (item.type === 'pdf') handleRenamePdfStart(item);
+                          openContextForItem(e, item);
                         }}
                         className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                        title="이름 변경"
+                        title="옵션"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (item.type === 'document') handleDelete(item.id);
-                          else if (item.type === 'image') deleteImage(item.id);
-                          else if (item.type === 'pdf') deletePdf(item.id);
-                        }}
-                        className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:bg-red-50 hover:text-red-500"
-                        title="삭제"
-                      >
-                        <Trash3 size={14} />
+                        <ThreeDots size={14} />
                       </button>
                     </div>
                   </div>
@@ -1275,8 +1250,8 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                               if (item.type === 'document') onDocumentSelect?.(item.id);
                               else if (item.type === 'image') handleImageView(item);
                               else if (item.type === 'pdf') handlePdfView(item);
+                              else if (item.type === 'video') handleVideoView(item);
                             }}
-                            onContextMenu={(e) => openContextForItem(e, item)}
                             draggable
                             onDragStart={(e) => handleDragStart(e, item)}
                           >
@@ -1285,6 +1260,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                               {item.type === 'document' && <FileText size={16} className="text-blue-600" />}
                               {item.type === 'image' && <Image size={16} className="text-emerald-600" />}
                               {item.type === 'pdf' && <FileEarmarkPdf size={16} className="text-red-500" />}
+                              {item.type === 'video' && <PlayCircle size={16} className="text-purple-600" />}
                             </div>
 
                             {/* 파일 정보 */}
@@ -1308,26 +1284,12 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (item.type === 'document') handleRenameStart(item);
-                                  else if (item.type === 'image') handleRenameImageStart(item);
-                                  else if (item.type === 'pdf') handleRenamePdfStart(item);
+                                  openContextForItem(e, item);
                                 }}
-                                className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:text-blue-500 transition-colors"
-                                title="이름 변경"
+                                className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                title="옵션"
                               >
-                                <Pencil size={14} />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (item.type === 'document') handleDelete(item.id);
-                                  else if (item.type === 'image') deleteImage(item.id);
-                                  else if (item.type === 'pdf') deletePdf(item.id);
-                                }}
-                                className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:text-red-500 transition-colors"
-                                title="삭제"
-                              >
-                                <Trash3 size={14} />
+                                <ThreeDots size={14} />
                               </button>
                             </div>
                           </div>
@@ -1369,7 +1331,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     key={img.id}
                     className="image-card group bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-200 cursor-pointer hover:shadow-lg"
                     onClick={() => handleImageView(img)}
-                    onContextMenu={(e) => openContextForItem(e, img)}
                   >
                     {/* Image Preview */}
                     <div className="h-48 flex justify-center items-center bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 overflow-hidden">
@@ -1412,28 +1373,18 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       right: '8px',
                 display: 'flex',
                       gap: '4px',
-                      opacity: 0,
+                      opacity: 1,
                       transition: 'opacity 0.2s ease'
                     }}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRenameImageStart(img);
+                          openContextForItem(e, { type: 'image', item: img });
                         }}
-                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-blue-500 transition-colors"
-                        title="이름 변경"
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        title="옵션"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleImageDelete(img.id);
-                        }}
-                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-red-500 transition-colors"
-                        title="삭제"
-                      >
-                        <Trash3 size={14} />
+                        <ThreeDots size={14} />
                       </button>
                     </div>
                   </div>
@@ -1472,7 +1423,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     key={img.id}
                     className="grid grid-cols-[1fr_120px_120px_80px] gap-4 p-4 px-5 border-b border-gray-300 dark:border-gray-600 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors items-center"
                     onClick={() => handleImageView(img)}
-                    onContextMenu={(e) => openContextForItem(e, img)}
                   >
                     {/* Name */}
                     <div className="flex items-center gap-3">
@@ -1507,7 +1457,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRenameImageStart(img);
+                          openContextForItem(e, { type: 'image', item: img });
                         }}
                         style={{
                           padding: '4px',
@@ -1517,28 +1467,9 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                           cursor: 'pointer',
                           borderRadius: '4px'
                         }}
-                        title="이름 변경"
+                        title="옵션"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleImageDelete(img.id);
-                        }}
-                        style={{
-                          padding: '4px',
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          borderRadius: '4px'
-                        }}
-                        title="삭제"
-                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
-                      >
-                        <Trash3 size={14} />
+                        <ThreeDots size={14} />
                       </button>
                     </div>
                   </div>
@@ -1572,7 +1503,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     key={video.id}
                     className="video-card group bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-200 cursor-pointer hover:shadow-lg"
                     onClick={() => handleVideoView(video)}
-                    onContextMenu={(e) => openContextForItem(e, video)}
                   >
                     {/* Video Preview */}
                     <div className="h-48 flex justify-center items-center bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 overflow-hidden">
@@ -1601,34 +1531,16 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     </div>
 
                     {/* Hover Actions */}
-                    <div className="video-actions" style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '8px',
-                      display: 'flex',
-                      gap: '4px',
-                      opacity: 0,
-                      transition: 'opacity 0.2s ease'
-                    }}>
+                    <div className="video-actions absolute top-2 right-2 flex gap-1 opacity-100 transition-opacity duration-200">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRenameVideoStart(video);
+                          openContextForItem(e, { type: 'video', item: video });
                         }}
-                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-blue-500 transition-colors"
-                        title="이름 변경"
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
+                        title="옵션"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleVideoDelete(video.id);
-                        }}
-                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-red-500 transition-colors"
-                        title="삭제"
-                      >
-                        <Trash3 size={14} />
+                        <ThreeDots size={14} />
                       </button>
                     </div>
                   </div>
@@ -1667,7 +1579,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     key={video.id}
                     className="grid grid-cols-[1fr_120px_120px_80px] gap-4 p-4 px-5 border-b border-gray-300 dark:border-gray-600 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors items-center"
                     onClick={() => handleVideoView(video)}
-                    onContextMenu={(e) => openContextForItem(e, video)}
                   >
                     {/* Name */}
                     <div className="flex items-center gap-3">
@@ -1701,22 +1612,12 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRenameVideoStart(video);
+                          openContextForItem(e, { type: 'video', item: video });
                         }}
-                        className="p-1 text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-blue-500 transition-colors"
-                        title="이름 변경"
+                        className="p-1 text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        title="옵션"
                       >
-                        <Pencil size={16} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleVideoDelete(video.id);
-                        }}
-                        className="p-1 text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-red-500 transition-colors"
-                        title="삭제"
-                      >
-                        <Trash3 size={16} />
+                        <ThreeDots size={16} />
                       </button>
                     </div>
                   </div>
@@ -1750,7 +1651,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     key={pdf.id}
                     className="pdf-card group bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-200 cursor-pointer hover:shadow-lg"
                     onClick={() => handlePdfView(pdf)}
-                    onContextMenu={(e) => openContextForItem(e, pdf)}
                   >
                     {/* PDF Icon */}
                     <div className="p-6 flex justify-center items-center bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
@@ -1779,34 +1679,16 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     </div>
 
                     {/* Hover Actions */}
-                    <div className="pdf-actions" style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '8px',
-                      display: 'flex',
-                      gap: '4px',
-                      opacity: 0,
-                      transition: 'opacity 0.2s ease'
-                    }}>
+                    <div className="pdf-actions absolute top-2 right-2 flex gap-1 opacity-100 transition-opacity duration-200">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRenamePdfStart(pdf);
+                          openContextForItem(e, { type: 'pdf', item: pdf });
                         }}
-                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-blue-500 transition-colors"
-                        title="이름 변경"
+                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
+                        title="옵션"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePdfDelete(pdf.id);
-                        }}
-                        className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:text-red-500 transition-colors"
-                        title="삭제"
-                      >
-                        <Trash3 size={14} />
+                        <ThreeDots size={14} />
                       </button>
                     </div>
                   </div>
@@ -1845,7 +1727,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                     key={pdf.id}
                     className="grid grid-cols-[1fr_120px_120px_80px] gap-4 p-4 px-5 border-b border-gray-300 dark:border-gray-600 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors items-center"
                     onClick={() => handlePdfView(pdf)}
-                    onContextMenu={(e) => openContextForItem(e, pdf)}
                   >
                     {/* Name */}
                     <div className="flex items-center gap-3">
@@ -1880,22 +1761,12 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRenamePdfStart(pdf);
+                          openContextForItem(e, { type: 'pdf', item: pdf });
                         }}
-                        className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:text-blue-500 transition-colors"
-                        title="이름 변경"
+                        className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        title="옵션"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePdfDelete(pdf.id);
-                        }}
-                        className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:text-red-500 transition-colors"
-                        title="삭제"
-                      >
-                        <Trash3 size={14} />
+                        <ThreeDots size={14} />
                       </button>
                     </div>
                   </div>
@@ -2048,11 +1919,12 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
         <div
           onClick={closeContextMenu}
           onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}
-          style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
+          style={{ position: 'fixed', inset: 0, zIndex: 999998 }}
         >
           <ContextMenu
             x={contextMenu.x}
             y={contextMenu.y}
+            anchorRect={contextMenu.anchorRect}
             items={getContextMenuItems(contextMenu.target)}
             onClose={closeContextMenu}
           />

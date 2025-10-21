@@ -24,10 +24,12 @@ export const useCanvas = (options: UseCanvasOptions = {}): UseCanvasReturn => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvas, setCanvas] = useState<fabric.Canvas | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  
+  // useRef로 history 관리 (클로저 문제 해결)
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef(-1);
 
   // 캔버스 초기화
   useEffect(() => {
@@ -43,8 +45,10 @@ export const useCanvas = (options: UseCanvasOptions = {}): UseCanvasReturn => {
 
     // 히스토리 초기화
     const initialState = JSON.stringify(fabricCanvas.toJSON());
-    setHistory([initialState]);
-    setHistoryIndex(0);
+    historyRef.current = [initialState];
+    historyIndexRef.current = 0;
+    setCanUndo(false);
+    setCanRedo(false);
 
     setCanvas(fabricCanvas);
     setIsReady(true);
@@ -54,15 +58,18 @@ export const useCanvas = (options: UseCanvasOptions = {}): UseCanvasReturn => {
       if (!fabricCanvas) return;
       
       const currentState = JSON.stringify(fabricCanvas.toJSON());
-      const newHistory = history.slice(0, historyIndex + 1);
+      const currentHistory = historyRef.current;
+      const currentIndex = historyIndexRef.current;
+      
+      const newHistory = currentHistory.slice(0, currentIndex + 1);
       newHistory.push(currentState);
       
       if (newHistory.length > 50) { // 최대 50개의 히스토리 유지
         newHistory.shift();
       }
       
-      setHistory(newHistory);
-      setHistoryIndex(newHistory.length - 1);
+      historyRef.current = newHistory;
+      historyIndexRef.current = newHistory.length - 1;
       setCanUndo(newHistory.length > 1);
       setCanRedo(false);
     };
@@ -78,29 +85,29 @@ export const useCanvas = (options: UseCanvasOptions = {}): UseCanvasReturn => {
 
   // 실행 취소
   const undo = useCallback(() => {
-    if (!canvas || historyIndex <= 0) return;
+    if (!canvas || historyIndexRef.current <= 0) return;
 
-    const previousState = history[historyIndex - 1];
+    const previousState = historyRef.current[historyIndexRef.current - 1];
     canvas.loadFromJSON(previousState, () => {
       canvas.renderAll();
-      setHistoryIndex(historyIndex - 1);
-      setCanUndo(historyIndex - 1 > 0);
+      historyIndexRef.current = historyIndexRef.current - 1;
+      setCanUndo(historyIndexRef.current > 0);
       setCanRedo(true);
     });
-  }, [canvas, history, historyIndex]);
+  }, [canvas]);
 
   // 다시 실행
   const redo = useCallback(() => {
-    if (!canvas || historyIndex >= history.length - 1) return;
+    if (!canvas || historyIndexRef.current >= historyRef.current.length - 1) return;
 
-    const nextState = history[historyIndex + 1];
+    const nextState = historyRef.current[historyIndexRef.current + 1];
     canvas.loadFromJSON(nextState, () => {
       canvas.renderAll();
-      setHistoryIndex(historyIndex + 1);
+      historyIndexRef.current = historyIndexRef.current + 1;
       setCanUndo(true);
-      setCanRedo(historyIndex + 1 < history.length - 1);
+      setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
     });
-  }, [canvas, history, historyIndex]);
+  }, [canvas]);
 
   // 캔버스 클리어
   const clearCanvas = useCallback(() => {
@@ -113,8 +120,8 @@ export const useCanvas = (options: UseCanvasOptions = {}): UseCanvasReturn => {
     
     // 히스토리 초기화
     const initialState = JSON.stringify(canvas.toJSON());
-    setHistory([initialState]);
-    setHistoryIndex(0);
+    historyRef.current = [initialState];
+    historyIndexRef.current = 0;
     setCanUndo(false);
     setCanRedo(false);
   }, [canvas, backgroundColor]);

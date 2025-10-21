@@ -2,8 +2,9 @@
   publish = "build"
   command = "npm run build"
 
-[build.environment]
-  REACT_APP_GEMINI_API_KEY = "your_api_key_here"
+# Do NOT store secret keys in this file. Set environment variables in Netlify UI:
+# Site settings -> Build & deploy -> Environment -> New variable
+# e.g. REACT_APP_GEMINI_API_KEY
 
 [[redirects]]
   from = "/*"

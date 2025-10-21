@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { VideoFile } from '../utils/db';
+import { VideoFile } from '../../utils/db';
 
 interface VideoPlayerProps {
   video: VideoFile;

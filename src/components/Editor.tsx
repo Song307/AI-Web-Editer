@@ -1,4 +1,5 @@
 import React, { useState, forwardRef, useImperativeHandle, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -16,7 +17,8 @@ import { marked } from 'marked';
 import { saveDocument, getDocument, Document } from '../utils/db';
 import { researchTopic, analyzeText, generatePersonaFeedback, answerQuestion } from '../utils/ai';
 import toast from 'react-hot-toast';
-import RenameModal from './RenameModal';
+import RenameModal from './UI/shared/RenameModal';
+import TurndownService from 'turndown';
 import { 
   TypeBold, 
   TypeItalic, 
@@ -69,7 +71,9 @@ interface EditorProps {
   onDirtyChange?: (isDirty: boolean) => void;
 }
 
-const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId, onSave, onDirtyChange }, ref) => {
+const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, onDirtyChange }, ref) => {
+  const { id } = useParams<{ id: string }>();
+  const documentId = id;
   const [title, setTitle] = useState('Untitled Document');
   const [aiResponse, setAiResponse] = useState<string>('');
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -463,118 +467,14 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ documentId
   }, [showSlashMenu]);
 
   const markdownToHtml = (markdown: string): string => {
-    // 단락 단위로 분리
-    const paragraphs = markdown.split(/\n\n+/).filter(p => p.trim());
-
-    return paragraphs.map(paragraph => {
-      // 각 단락 내에서 리스트 그룹화
-      const lines = paragraph.split('\n');
-      let html = '';
-      let currentListType = null;
-      let listItems = [];
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-
-        // 빈 줄 스킵
-        if (!trimmed) continue;
-
-        // 리스트 아이템 확인
-        const ulMatch = trimmed.match(/^(\*|\-) (.+)$/);
-        const olMatch = trimmed.match(/^(\d+)\. (.+)$/);
-
-        if (ulMatch) {
-          // UL 리스트 처리
-          if (currentListType !== 'ul') {
-            // 이전 리스트 닫기
-            if (currentListType === 'ol') {
-              html += `<ol>${listItems.map(item => `<li>${item}</li>`).join('')}</ol>`;
-              listItems = [];
-            }
-            currentListType = 'ul';
-          }
-          // 마크다운 요소 변환 후 추가
-          const processedItem = ulMatch[2]
-            .replace(/\*\*([^*\r\n]+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/(^|[^*])\*([^*\r\n]+?)\*([^*]|$)/g, '$1<em>$2</em>$3')
-            .replace(/`([^`]+)`/g, '<code>$1</code>');
-          listItems.push(processedItem);
-        } else if (olMatch) {
-          // OL 리스트 처리
-          if (currentListType !== 'ol') {
-            // 이전 리스트 닫기
-            if (currentListType === 'ul') {
-              html += `<ul>${listItems.map(item => `<li>${item}</li>`).join('')}</ul>`;
-              listItems = [];
-            }
-            currentListType = 'ol';
-          }
-          // 마크다운 요소 변환 후 추가
-          const processedItem = olMatch[2]
-            .replace(/\*\*([^*\r\n]+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/(^|[^*])\*([^*\r\n]+?)\*([^*]|$)/g, '$1<em>$2</em>$3')
-            .replace(/`([^`]+)`/g, '<code>$1</code>');
-          listItems.push(processedItem);
-        } else {
-          // 리스트가 끝났으면 리스트 HTML 생성
-          if (currentListType) {
-            if (currentListType === 'ul') {
-              html += `<ul>${listItems.map(item => `<li>${item}</li>`).join('')}</ul>`;
-            } else {
-              html += `<ol>${listItems.map(item => `<li>${item}</li>`).join('')}</ol>`;
-            }
-            listItems = [];
-            currentListType = null;
-          }
-
-          // 일반 텍스트 처리
-          let processedLine = trimmed
-            // 헤딩
-            .replace(/^### (.+)$/, '<h3>$1</h3>')
-            .replace(/^## (.+)$/, '<h2>$1</h2>')
-            .replace(/^# (.+)$/, '<h1>$1</h1>')
-            // 굵은 글씨
-            .replace(/\*\*([^*\r\n]+?)\*\*/g, '<strong>$1</strong>')
-            // 기울임
-            .replace(/(^|[^*])\*([^*\r\n]+?)\*([^*]|$)/g, '$1<em>$2</em>$3')
-            // 인라인 코드
-            .replace(/`([^`]+)`/g, '<code>$1</code>');
-
-          html += processedLine;
-        }
-      }
-
-      // 마지막 리스트 처리
-      if (currentListType) {
-        if (currentListType === 'ul') {
-          html += `<ul>${listItems.map(item => `<li>${item}</li>`).join('')}</ul>`;
-        } else {
-          html += `<ol>${listItems.map(item => `<li>${item}</li>`).join('')}</ol>`;
-        }
-      }
-
-      // 헤딩인 경우 그대로 반환, 아니면 <p>로 감싸기
-      if (html.match(/^<h[1-6]>.*<\/h[1-6]>$/)) {
-        return html;
-      } else {
-        return `<p>${html}</p>`;
-      }
-    }).join('');
+    // marked 라이브러리를 사용해서 마크다운을 HTML로 변환
+    return marked(markdown) as string;
   };
 
   const htmlToMarkdown = (html: string): string => {
-    // 간단한 HTML을 마크다운으로 변환
-    return html
-      .replace(/<h3>(.*?)<\/h3>/gi, '### $1')
-      .replace(/<h2>(.*?)<\/h2>/gi, '## $1')
-      .replace(/<h1>(.*?)<\/h1>/gi, '# $1')
-      .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-      .replace(/<em>(.*?)<\/em>/gi, '*$1*')
-      .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')
-      .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-      .replace(/<\/p><p>/gi, '\n\n')
-      .replace(/<br>/gi, '\n')
-      .replace(/<p>(.*?)<\/p>/gi, '$1');
+    // turndown 라이브러리를 사용해서 HTML을 마크다운으로 변환
+    const turndownService = new TurndownService();
+    return turndownService.turndown(html);
   };
 
   const slashMenuItems = [

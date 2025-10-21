@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { Clipboard2, Trash3, ClipboardCheck, Image, FileText, Inbox, FileEarmarkPdf } from 'react-bootstrap-icons';
-import PDFViewer from './PDFViewer';
+import PDFViewer from '../../tools/PDFViewer';
 
 interface ClipboardItem {
   id: string;

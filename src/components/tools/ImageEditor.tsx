@@ -6,8 +6,8 @@ import {
   ZoomIn, ZoomOut, ArrowCounterclockwise, ArrowClockwise, Save, Upload, Download,
   Trash2, Copy, Eye, EyeSlash, ArrowsFullscreen
 } from 'react-bootstrap-icons';
-import { useCanvas } from '../hooks/useCanvas';
-import { useImageFilters, ImageFilters } from '../hooks/useImageFilters';
+import { useCanvas } from '../../hooks/useCanvas';
+import { useImageFilters, ImageFilters } from '../../hooks/useImageFilters';
 import {
   addImageToCanvas,
   addTextToCanvas,
@@ -18,8 +18,8 @@ import {
   moveObjectLayer,
   zoomCanvas,
   panCanvas
-} from '../utils/canvasUtils';
-import { saveEditedImage, getAllEditedImages, EditedImageFile } from '../utils/db';
+} from '../../utils/canvasUtils';
+import { saveEditedImage, getAllEditedImages, EditedImageFile } from '../../utils/db';
 import toast from 'react-hot-toast';
 
 interface ImageEditorProps {

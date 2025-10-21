@@ -9,19 +9,17 @@ export interface ContextMenuItem {
 interface ContextMenuProps {
   x: number;
   y: number;
+  anchorRect?: { left: number; right: number; top: number; bottom: number; width: number; height: number } | null;
   items: ContextMenuItem[];
   onClose: () => void;
 }
 
-const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }) => {
+const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, anchorRect, items, onClose }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [adjustedPosition, setAdjustedPosition] = useState({ x, y });
 
-  console.log('ContextMenu received position:', { x, y });
-
   // Set initial position and adjust if needed
   useEffect(() => {
-    console.log('ContextMenu useEffect triggered with:', { x, y });
     setAdjustedPosition({ x, y });
 
     // Adjust position after a brief delay to ensure menu is rendered
@@ -29,12 +27,9 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }) => {
       if (menuRef.current) {
         const menu = menuRef.current;
         const rect = menu.getBoundingClientRect();
-        console.log('Menu actual position in DOM:', { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
 
         const menuWidth = rect.width;
         const menuHeight = rect.height;
-
-        console.log('Menu dimensions:', { menuWidth, menuHeight, rect });
 
         const vw = window.innerWidth;
         const vh = window.innerHeight;
@@ -42,25 +37,50 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }) => {
 
         let finalX = x;
         let finalY = y;
+        const gap = 8; // gap between anchor and menu when using anchorRect
 
-        // Adjust position to keep menu within viewport
-        if (x + menuWidth > vw - margin) {
-          finalX = Math.max(margin, x - menuWidth);
-          console.log('Adjusted X for right overflow:', { originalX: x, finalX, menuWidth, vw });
+        if (anchorRect) {
+          // Prefer centering under the anchor
+          finalX = anchorRect.left + (anchorRect.width / 2) - (menuWidth / 2);
+          finalY = anchorRect.bottom + gap;
+
+          // If overflowing to the right, align the menu's right edge with the anchor's right edge (so it appears to the left)
+          if (finalX + menuWidth > vw - margin) {
+            finalX = Math.min(vw - margin - menuWidth, anchorRect.right - menuWidth);
+          }
+
+          // If still overflowing to the left, clamp to margin
+          if (finalX < margin) {
+            finalX = margin;
+          }
+
+          // If menu would go below viewport, try showing above the anchor
+          if (finalY + menuHeight > vh - margin) {
+            const aboveY = anchorRect.top - menuHeight - gap;
+            if (aboveY >= margin) {
+              finalY = aboveY;
+            } else {
+              // fallback: clamp to fit in viewport
+              finalY = Math.max(margin, vh - menuHeight - margin);
+            }
+          }
+        } else {
+          // Adjust position to keep menu within viewport (fallback behavior)
+          if (x + menuWidth > vw - margin) {
+            finalX = Math.max(margin, x - menuWidth);
+          }
+
+          if (y + menuHeight > vh - margin) {
+            finalY = Math.max(margin, y - menuHeight);
+          }
         }
 
-        if (y + menuHeight > vh - margin) {
-          finalY = Math.max(margin, y - menuHeight);
-          console.log('Adjusted Y for bottom overflow:', { originalY: y, finalY, menuHeight, vh });
-        }
-
-        console.log('Final adjusted position:', { finalX, finalY });
         setAdjustedPosition({ x: finalX, y: finalY });
       }
     }, 10);
 
     return () => clearTimeout(timer);
-  }, [x, y]);
+  }, [x, y, anchorRect]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
