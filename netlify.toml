@@ -1,8 +1,7 @@
 [build]
   publish = "build"
   command = "npm run build"
-  functions = "netlify/functions"
-  
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
