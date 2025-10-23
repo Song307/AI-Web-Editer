@@ -11,6 +11,9 @@
 # production
 /build
 
+# Netlify functions (API keys)
+/netlify
+
 # misc
 .DS_Store
 .env.local
