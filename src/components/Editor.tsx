@@ -15,9 +15,10 @@ import { Extension } from '@tiptap/core';
 import { Plugin } from 'prosemirror-state';
 import { marked } from 'marked';
 import { saveDocument, getDocument, Document } from '../utils/db';
-import { researchTopic, analyzeText, generatePersonaFeedback, answerQuestion } from '../utils/ai';
+import { researchTopic, analyzeText, generatePersonaFeedback, answerQuestion, analyzeImage, analyzePDFPages } from '../utils/ai';
 import toast from 'react-hot-toast';
 import RenameModal from './UI/shared/RenameModal';
+import AIPopup from './UI/shared/AIPopup';
 import TurndownService from 'turndown';
 import { 
   TypeBold, 
@@ -34,7 +35,8 @@ import {
   Code,
   Quote,
   Dash,
-  CheckSquare
+  CheckSquare,
+  Robot
 } from 'react-bootstrap-icons';
 
 // 마크다운 붙여넣기 확장
@@ -88,6 +90,8 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
   const [linkUrl, setLinkUrl] = useState('');
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [persona, setPersona] = useState('');
+  const [showAIPopup, setShowAIPopup] = useState(false);
+  const [selectionPreviewImage, setSelectionPreviewImage] = useState<string | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -847,6 +851,109 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
     toast.success('AI 응답이 적용되었습니다.');
   };
 
+  // AI 팝업 메시지 핸들러
+  const handleAIPopupMessage = async (message: string, files?: Array<{name: string; type: 'image' | 'pdf'; data: string; size: number; pageCount?: number}>): Promise<string> => {
+    try {
+      // 파일이 있는 경우 멀티모달 분석
+      if (files && files.length > 0) {
+        const imageFiles = files.filter(f => f.type === 'image');
+        const pdfFiles = files.filter(f => f.type === 'pdf');
+        
+        let response = '';
+        
+        // 이미지 분석
+        for (const imageFile of imageFiles) {
+          const imageResponse = await analyzeImage(imageFile.data, message);
+          response += `\n\n### ${imageFile.name} 분석:\n${imageResponse}`;
+        }
+        
+        // PDF 분석
+        for (const pdfFile of pdfFiles) {
+          try {
+            // JSON 문자열에서 페이지 이미지 배열 파싱
+            const pageImages = JSON.parse(pdfFile.data) as string[];
+            const pdfResponse = await analyzePDFPages(pageImages, message);
+            response += `\n\n### ${pdfFile.name} 분석 (${pdfFile.pageCount}페이지):\n${pdfResponse}`;
+          } catch (error) {
+            console.error('PDF parsing error:', error);
+            response += `\n\n### ${pdfFile.name}: PDF 분석 중 오류가 발생했습니다.`;
+          }
+        }
+        
+        return response.trim() || '파일 분석을 완료했습니다.';
+      }
+      
+      // 파일이 없는 경우 기존 텍스트 기반 처리
+      const documentContext = editor?.getText() || '';
+      const contextualPrompt = documentContext 
+        ? `문서 컨텍스트:\n${documentContext.slice(0, 500)}...\n\n사용자 질문: ${message}`
+        : message;
+
+      // 간단한 질문-답변 형식으로 처리
+      const response = await answerQuestion(contextualPrompt);
+      return response;
+    } catch (error) {
+      console.error('AI popup message error:', error);
+      throw new Error('AI 응답 생성 중 오류가 발생했습니다.');
+    }
+  };
+
+  // AI 팝업 열기: 현재 선택된 텍스트가 있으면 preview로 전달
+  const openAIPopup = () => {
+    setSelectionPreviewImage(null);
+
+    if (editor) {
+      try {
+        const { from, to } = editor.state.selection;
+        const selectedText = editor.state.doc.textBetween(from, to);
+        if (selectedText && selectedText.trim()) {
+          setSelectedTextForAI({ from, to, text: selectedText });
+
+          // Get HTML with styling from editor
+          const selectedHTML = editor.view.domAtPos(from).node.parentElement?.innerHTML || '';
+          
+          // Try to get styled HTML fragment
+          setTimeout(() => {
+            try {
+              const sel = window.getSelection();
+              if (!sel || sel.rangeCount === 0) {
+                setSelectionPreviewImage(null);
+                return;
+              }
+
+              const range = sel.getRangeAt(0);
+              const fragment = range.cloneContents();
+              const tempDiv = document.createElement('div');
+              tempDiv.appendChild(fragment);
+              const styledHTML = tempDiv.innerHTML;
+              
+              // Store the styled HTML as preview
+              if (styledHTML && styledHTML.trim()) {
+                setSelectionPreviewImage(styledHTML);
+              } else {
+                setSelectionPreviewImage(null);
+              }
+            } catch (err) {
+              // fallback to text preview only
+              setSelectionPreviewImage(null);
+            }
+          }, 10);
+        } else {
+          setSelectedTextForAI(null);
+        }
+      } catch (e) {
+        setSelectedTextForAI(null);
+      }
+    }
+
+    setShowAIPopup(true);
+  };
+
+  const clearSelection = () => {
+    setSelectionPreviewImage(null);
+    setSelectedTextForAI(null);
+  };
+
   useImperativeHandle(ref, () => ({
     handleSave,
   }));
@@ -856,8 +963,9 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
   }
 
   return (
-    <div className="flex-1 flex flex-col relative">
-      <div className="flex items-center mb-4 gap-3 px-6 pt-5">
+    <div className="flex-1 flex flex-col relative overflow-visible pb-6 min-h-0">
+      {/* 헤더 영역 - 고정 */}
+      <div className="flex-shrink-0 flex items-center mb-4 gap-3 px-6 pt-5">
         <input
           type="text"
           value={title}
@@ -867,7 +975,12 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
         />
         <button onClick={handleSave} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md font-semibold cursor-pointer transition-all hover:transform hover:-translate-y-0.5">저장</button>
       </div>
-      <div className="flex flex-wrap gap-2 mb-4 mx-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+      
+      {/* 에디터 영역 - 툴바 포함 */}
+      <div className="flex-1 mx-6 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 mb-6">
+        
+        {/* 툴바 영역 - 에디터 내부 상단 */}
+        <div className="flex-shrink-0 flex flex-wrap gap-2 p-3 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
         <button
           onClick={() => editor.chain().focus().toggleBold().run()}
           className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
@@ -1021,18 +1134,21 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
         </button>
       </div>
       </div>
-      <div className="flex-1 cursor-text px-6" onClick={() => editor?.commands.focus()}>
+      
+      {/* 에디터 컨텐츠 영역 - 툴바 아래 */}
+      <div className="flex-1 min-h-0 cursor-text relative overflow-y-auto" onClick={() => editor?.commands.focus()}>
         {!isEditorReady ? (
-          <div className="flex flex-col items-center justify-center h-full">
+          <div className="flex flex-col items-center justify-center h-full p-6">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
             <p className="text-gray-600 dark:text-gray-400">에디터를 로딩 중...</p>
           </div>
         ) : (
           <EditorContent 
             editor={editor} 
-            className="flex-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg py-6 min-h-[400px] overflow-y-auto focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 [&_.ProseMirror]:outline-none [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:text-sm sm:[&_.ProseMirror]:text-base [&_.ProseMirror]:max-w-none [&_.ProseMirror]:resize-none [&_.ProseMirror]:h-full [&_.ProseMirror]:border-0 [&_.ProseMirror]:focus:outline-none [&_.ProseMirror]:px-6" 
+            className="h-full [&_.ProseMirror]:outline-none [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:text-sm sm:[&_.ProseMirror]:text-base [&_.ProseMirror]:max-w-none [&_.ProseMirror]:border-0 [&_.ProseMirror]:focus:outline-none [&_.ProseMirror]:p-6 [&_.ProseMirror]:min-h-full [&_.ProseMirror]:overflow-y-visible [&_.ProseMirror]:pb-16" 
           />
         )}
+        
         {showSlashMenu && isEditorReady && (
           <div
             className="absolute bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg py-2 z-50 max-h-64 overflow-y-auto"
@@ -1056,22 +1172,89 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
           </div>
         )}
       </div>
+      </div>
+
       {isAiLoading && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-            <p className="text-blue-700 dark:text-blue-300 m-0">AI가 응답을 생성하고 있습니다. 잠시만 기다려주세요.</p>
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-6 mb-4 backdrop-blur-sm">
+          <div className="flex items-center gap-4">
+            {/* 애니메이션 아이콘 */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full opacity-20 animate-ping"></div>
+              <div className="relative p-3 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full">
+                <Robot className="w-6 h-6 text-white animate-pulse" />
+              </div>
+            </div>
+            
+            {/* 로딩 메시지 */}
+            <div className="flex-1">
+              <p className="text-gray-900 dark:text-gray-100 font-semibold m-0 mb-1">
+                AI가 응답을 생성하고 있습니다
+              </p>
+              <p className="text-gray-500 dark:text-gray-400 text-sm m-0">
+                잠시만 기다려주세요...
+              </p>
+            </div>
+            
+            {/* 점 애니메이션 */}
+            <div className="flex gap-1">
+              <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            </div>
           </div>
         </div>
       )}
       {aiResponse && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">
-          <h3 className="text-lg font-semibold text-green-800 dark:text-green-200 m-0 mb-3">AI 응답:</h3>
-          <div className="text-gray-700 dark:text-gray-300 mb-4 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: markdownToHtml(aiResponse) }} />
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-6 mb-4 backdrop-blur-sm">
+          {/* 헤더 영역 */}
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg">
+                <Robot className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 m-0">
+                AI 응답
+              </h3>
+            </div>
+            <button 
+              onClick={() => setAiResponse('')} 
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              disabled={isAiLoading}
+            >
+              <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          {/* 컨텐츠 영역 */}
+          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 mb-4">
+            <div className="text-gray-800 dark:text-gray-200 prose dark:prose-invert max-w-none prose-headings:text-gray-900 dark:prose-headings:text-gray-100 prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-strong:text-gray-900 dark:prose-strong:text-gray-100 prose-code:text-purple-600 dark:prose-code:text-purple-400" 
+                 dangerouslySetInnerHTML={{ __html: markdownToHtml(aiResponse) }} />
+          </div>
+          
+          {/* 액션 버튼 영역 */}
           <div className="flex gap-2">
-            <button onClick={applyAIResponse} className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={isAiLoading}>에디터에 적용</button>
-            <button onClick={copyAIResponse} className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={isAiLoading}>복사</button>
-            <button onClick={() => setAiResponse('')} className="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled={isAiLoading}>닫기</button>
+            <button 
+              onClick={applyAIResponse} 
+              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg text-sm font-semibold cursor-pointer transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-sm flex items-center justify-center gap-2" 
+              disabled={isAiLoading}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              에디터에 적용
+            </button>
+            <button 
+              onClick={copyAIResponse} 
+              className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-semibold cursor-pointer transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-sm flex items-center justify-center gap-2" 
+              disabled={isAiLoading}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              복사
+            </button>
           </div>
         </div>
       )}
@@ -1105,6 +1288,25 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
         onConfirm={handlePersonaConfirm}
         onCancel={handlePersonaCancel}
       />
+      
+      {/* AI 팝업 */}
+      <AIPopup
+        isOpen={showAIPopup}
+        onClose={() => setShowAIPopup(false)}
+        onSendMessage={handleAIPopupMessage}
+        selectionPreview={selectionPreviewImage ?? selectedTextForAI?.text ?? null}
+        isLoading={isAiLoading}
+        onClearSelection={clearSelection}
+      />
+      
+      {/* AI 요청 버튼 - 화면 우측 하단 고정 */}
+      <button
+        onClick={openAIPopup}
+        className="fixed bottom-12 right-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full p-4 shadow-lg transition-all hover:scale-110 hover:shadow-xl z-50"
+        title="AI 어시스턴트"
+      >
+        <Robot size={24} />
+      </button>
     </div>
   );
 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, ClipboardCheck, Gear, Plus, Trash3, Folder, Database, Palette, MenuButton, X } from 'react-bootstrap-icons';
+import { FileText, ClipboardCheck, Gear, Plus, Trash3, Folder, Database, Palette, MenuButton, X, Robot, ChatDots } from 'react-bootstrap-icons';
 import { Document } from '../../utils/db';
 
 interface SidebarProps {
@@ -84,6 +84,21 @@ const Sidebar: React.FC<SidebarProps> = ({
           </button>
           <button
             onClick={() => {
+              navigate('/ai-assistant');
+              if (window.innerWidth < 768) setIsSidebarOpen(false);
+            }}
+            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+              window.location.pathname === '/ai-assistant'
+                ? 'bg-indigo-600 text-white'
+                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
+            title={language === 'ko' ? 'AI 어시스턴트' : 'AI Assistant'}
+          >
+            <ChatDots size={isSidebarOpen ? 18 : 24} />
+            {isSidebarOpen && <span>{language === 'ko' ? 'AI 어시스턴트' : 'AI Assistant'}</span>}
+          </button>
+          <button
+            onClick={() => {
               navigate('/clipboard');
               if (window.innerWidth < 768) setIsSidebarOpen(false);
             }}
@@ -126,6 +141,21 @@ const Sidebar: React.FC<SidebarProps> = ({
           >
             <Palette size={isSidebarOpen ? 18 : 24} />
             {isSidebarOpen && <span>{language === 'ko' ? '이미지 편집기' : 'Image Editor'}</span>}
+          </button>
+          <button
+            onClick={() => {
+              navigate('/ai-secretary');
+              if (window.innerWidth < 768) setIsSidebarOpen(false);
+            }}
+            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+              window.location.pathname === '/ai-secretary'
+                ? 'bg-indigo-600 text-white'
+                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
+            title={language === 'ko' ? 'AI 비서' : 'AI Secretary'}
+          >
+            <Robot size={isSidebarOpen ? 18 : 24} />
+            {isSidebarOpen && <span>{language === 'ko' ? 'AI 비서' : 'AI Secretary'}</span>}
           </button>
           <button
             onClick={() => {

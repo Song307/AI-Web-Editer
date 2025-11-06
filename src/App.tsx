@@ -6,6 +6,9 @@ import WorkspacePage from './components/WorkspacePage';
 import StoragePage from './components/StoragePage';
 import Settings from './components/Settings';
 import ImageEditor from './components/tools/ImageEditor';
+import AISecretaryCreator from './components/AISecretaryCreator';
+import AISecretaryManager from './components/AISecretaryManager';
+import AIAssistantPage from './components/AIAssistantPage';
 import Sidebar from './components/layout/Sidebar';
 import { getAllDocuments, initDB, deleteDocument, Document } from './utils/db';
 import { Toaster } from 'react-hot-toast';
@@ -22,7 +25,24 @@ function App() {
 function AppContent() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isDirty, setIsDirty] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('isSidebarOpen');
+    return saved ? JSON.parse(saved) : true;
+  });
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('isRightSidebarOpen');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebarWidth');
+    return saved ? parseInt(saved) : 320;
+  });
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('rightSidebarWidth');
+    return saved ? parseInt(saved) : 320;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const [isResizingRight, setIsResizingRight] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('isDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -34,10 +54,46 @@ function AppContent() {
   const editorRef = useRef<{ handleSave: () => void } | null>(null);
   const navigate = useNavigate();
 
+  // 사이드바 상태 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('isSidebarOpen', JSON.stringify(isSidebarOpen));
+  }, [isSidebarOpen]);
+
+  // 사이드바 너비 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('sidebarWidth', sidebarWidth.toString());
+  }, [sidebarWidth]);
+
+  // 우측 사이드바 너비 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('rightSidebarWidth', rightSidebarWidth.toString());
+  }, [rightSidebarWidth]);
+
+  // 우측 사이드바 상태 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('isRightSidebarOpen', JSON.stringify(isRightSidebarOpen));
+  }, [isRightSidebarOpen]);
+
     useEffect(() => {
-    initDB();
-    loadDocuments();
-    // API 키 테스트 제거 - 실제 사용 시 에러 처리
+    const initializeDB = async () => {
+      try {
+        await initDB();
+        console.log('App: DB 초기화 성공');
+        await loadDocuments();
+      } catch (error) {
+        console.error('App: DB 초기화 실패:', error);
+        // 재시도
+        try {
+          console.log('App: DB 재초기화 시도');
+          await initDB();
+          await loadDocuments();
+        } catch (retryError) {
+          console.error('App: DB 재초기화도 실패:', retryError);
+        }
+      }
+    };
+    
+    initializeDB();
   }, []); // language 의존성 제거 - API 테스트는 한 번만 실행
 
   useEffect(() => {
@@ -57,6 +113,61 @@ function AppContent() {
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
   };
+
+  // 사이드바 리사이저 핸들러
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  // 우측 사이드바 리사이저 핸들러
+  const handleRightMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingRight(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizing) {
+        const minWidth = 200;
+        const maxWidth = 600;
+        const newWidth = e.clientX;
+
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+          setSidebarWidth(newWidth);
+        }
+      }
+
+      if (isResizingRight) {
+        const minWidth = 250;
+        const maxWidth = 800;
+        const newWidth = window.innerWidth - e.clientX;
+
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+          setRightSidebarWidth(newWidth);
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      setIsResizingRight(false);
+    };
+
+    if (isResizing || isResizingRight) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, isResizingRight]);
 
   const loadDocuments = async () => {
     const docs = await getAllDocuments();
@@ -97,27 +208,68 @@ function AppContent() {
 
   return (
     <div className="min-h-screen p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
-      <header className="text-center mb-8 text-gray-900 dark:text-gray-100 relative z-10">
-        <div className="flex justify-between items-center max-w-6xl mx-auto">
-          <h1 className="text-5xl font-extrabold m-0 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-purple-400 tracking-tight">
-            {language === 'ko' ? 'AI 워크스페이스' : 'AI Workspace'}
-          </h1>
+      
+      {/* 우측 상단 고정 토글 버튼 */}
+      {!isRightSidebarOpen && (
+        <button
+          onClick={() => setIsRightSidebarOpen(true)}
+          className="fixed top-6 right-6 z-50 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          title="사이드바 열기"
+        >
+          <svg
+            className="w-6 h-6 text-gray-700 dark:text-gray-300"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      )}
+      
+      <div 
+        className="flex h-[calc(100vh-48px)] relative"
+        style={{ 
+          marginRight: isRightSidebarOpen ? `${rightSidebarWidth}px` : '0',
+          transition: isResizing || isResizingRight ? 'none' : 'margin-right 300ms ease-in-out'
+        }}
+      >
+        {/* 좌측 사이드바 */}
+        <div 
+          style={{ 
+            width: isSidebarOpen ? `${sidebarWidth}px` : '80px',
+            minWidth: isSidebarOpen ? '200px' : '80px',
+            maxWidth: isSidebarOpen ? '600px' : '80px',
+            transition: isResizing ? 'none' : 'width 300ms ease-in-out'
+          }}
+          className="flex-shrink-0"
+        >
+          <Sidebar
+            isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
+            language={language}
+            documents={documents}
+            createNewDocument={createNewDocument}
+            handleRenameStart={handleRenameStart}
+            handleDelete={handleDelete}
+          />
         </div>
-      </header>
-      <div className={`grid gap-6 h-[calc(100vh-140px)] transition-all duration-300 ${
-        isSidebarOpen ? 'grid-cols-[320px_1fr]' : 'grid-cols-[80px_1fr]'
-      }`}>
-        <Sidebar
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-          language={language}
-          documents={documents}
-          createNewDocument={createNewDocument}
-          handleRenameStart={handleRenameStart}
-          handleDelete={handleDelete}
-        />
 
-        <main className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto flex flex-col scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
+        {/* 리사이저 */}
+        {isSidebarOpen && (
+          <div
+            className="w-1 hover:w-2 bg-transparent hover:bg-blue-500 cursor-col-resize transition-all flex-shrink-0 relative group"
+            onMouseDown={handleMouseDown}
+          >
+            <div className="absolute inset-y-0 -left-1 -right-1 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="w-1 h-12 bg-blue-500 rounded-full"></div>
+            </div>
+          </div>
+        )}
+
+        {/* 메인 컨텐츠 */}
+        <div className="flex-1 min-w-0 ml-6">
+          <main className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto h-full flex flex-col scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
           <Routes>
             <Route path="/" element={<Navigate to="/workspace" replace />} />
             <Route path="/documents" element={<Editor ref={editorRef} onSave={handleSave} onDirtyChange={setIsDirty} />} />
@@ -125,6 +277,9 @@ function AppContent() {
             <Route path="/clipboard" element={<ClipboardPage />} />
             <Route path="/storage" element={<StoragePage />} />
             <Route path="/image-editor" element={<ImageEditor />} />
+            <Route path="/ai-secretary" element={<AISecretaryManager />} />
+            <Route path="/ai-secretary/create" element={<AISecretaryCreator />} />
+            <Route path="/ai-assistant" element={<AIAssistantPage />} />
             <Route path="/workspace" element={<WorkspacePage onDocumentSelect={(id) => {
               if (id === 'new') {
                 // 새 문서 만들기 로직
@@ -143,6 +298,80 @@ function AppContent() {
             } />
           </Routes>
         </main>
+        </div>
+      </div>
+      
+      {/* 우측 사이드바 - 최상위 레벨 */}
+      <div
+        className={`fixed top-0 right-0 h-screen bg-white dark:bg-gray-800 shadow-2xl border-l border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out z-50 flex ${
+          isRightSidebarOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        style={{
+          width: `${rightSidebarWidth}px`,
+          transition: isResizingRight ? 'none' : 'transform 300ms ease-in-out'
+        }}
+      >
+        {/* 리사이저 */}
+        <div
+          className="w-1 hover:w-2 bg-transparent hover:bg-blue-500 cursor-col-resize transition-all flex-shrink-0 relative group"
+          onMouseDown={handleRightMouseDown}
+        >
+          <div className="absolute inset-y-0 -left-1 -right-1 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="w-1 h-12 bg-blue-500 rounded-full"></div>
+          </div>
+        </div>
+
+        <div className="flex flex-col h-full flex-1 min-w-0">
+          {/* 사이드바 헤더 - 버튼 공간 확보 */}
+          <div className="relative pt-20 px-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+            {/* X 버튼 - 우측 상단 고정 */}
+            <button
+              onClick={() => setIsRightSidebarOpen(false)}
+              className="absolute top-6 right-6 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="사이드바 닫기"
+            >
+              <svg
+                className="w-6 h-6 text-gray-600 dark:text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              작업 공간
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              여기에 사이드바 컨텐츠를 추가하세요
+            </p>
+          </div>
+          
+          {/* 사이드바 내용 */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {/* 예시 컨텐츠 영역 */}
+            <div className="space-y-3">
+              <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  섹션 1
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  여기에 내용을 추가하세요.
+                </p>
+              </div>
+              
+              <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  섹션 2
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  여기에 내용을 추가하세요.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <Toaster
         position="bottom-right"
