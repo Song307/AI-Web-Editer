@@ -52,7 +52,9 @@ function AppContent() {
     const saved = localStorage.getItem('language');
     return (saved === 'ko' || saved === 'en') ? saved : 'ko';
   });
-  const editorRef = useRef<{ handleSave: () => void; saveEditorStateToCookie: () => void } | null>(null);
+  const [selectionPreview, setSelectionPreview] = useState<string | null>(null);
+  const [selectionRange, setSelectionRange] = useState<{ from: number; to: number } | null>(null);
+  const editorRef = useRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void } | null>(null);
   const navigate = useNavigate();
 
   // 사이드바 상태 변경 시 localStorage에 저장
@@ -113,6 +115,19 @@ function AppContent() {
 
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
+  };
+
+  const clearSelection = () => {
+    setSelectionPreview(null);
+    setSelectionRange(null);
+    // 하이라이트 제거
+    if (editorRef.current) {
+      editorRef.current.clearHighlight();
+    }
+  };
+
+  const openTaskbar = () => {
+    setIsRightSidebarOpen(true);
   };
 
   // 사이드바 리사이저 핸들러
@@ -274,8 +289,8 @@ function AppContent() {
           <main className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto h-full flex flex-col scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
           <Routes>
             <Route path="/" element={<Navigate to="/workspace" replace />} />
-            <Route path="/documents" element={<Editor ref={editorRef} onSave={handleSave} onDirtyChange={setIsDirty} />} />
-            <Route path="/documents/:id" element={<Editor ref={editorRef} onSave={handleSave} onDirtyChange={setIsDirty} />} />
+            <Route path="/documents" element={<Editor ref={editorRef} onSave={handleSave} onDirtyChange={setIsDirty} onSelectionPreviewChange={setSelectionPreview} onSelectionRangeChange={setSelectionRange} onOpenTaskbar={openTaskbar} />} />
+            <Route path="/documents/:id" element={<Editor ref={editorRef} onSave={handleSave} onDirtyChange={setIsDirty} onSelectionPreviewChange={setSelectionPreview} onSelectionRangeChange={setSelectionRange} onOpenTaskbar={openTaskbar} />} />
             <Route path="/clipboard" element={<ClipboardPage />} />
             <Route path="/storage" element={<StoragePage />} />
             <Route path="/image-editor" element={<ImageEditor />} />
@@ -308,8 +323,32 @@ function AppContent() {
         isRightSidebarOpen={isRightSidebarOpen}
         rightSidebarWidth={rightSidebarWidth}
         isResizingRight={isResizingRight}
-        onClose={() => setIsRightSidebarOpen(false)}
+        onClose={() => {
+          setIsRightSidebarOpen(false);
+          // Taskbar 닫을 때 하이라이트 제거
+          if (editorRef.current) {
+            editorRef.current.clearHighlight();
+          }
+        }}
         onMouseDown={handleRightMouseDown}
+        selectionPreview={selectionPreview}
+        selectionRange={selectionRange}
+        onClearSelection={clearSelection}
+        onReplaceSelection={(newText: string) => {
+          if (editorRef.current) {
+            editorRef.current.replaceSelection(newText);
+          }
+        }}
+        onHighlightSelection={(from: number, to: number) => {
+          if (editorRef.current) {
+            editorRef.current.highlightSelection(from, to);
+          }
+        }}
+        onClearHighlight={() => {
+          if (editorRef.current) {
+            editorRef.current.clearHighlight();
+          }
+        }}
       />
       <Toaster
         position="bottom-right"

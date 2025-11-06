@@ -15,11 +15,11 @@ import { Image } from '@tiptap/extension-image';
 import { Link } from '@tiptap/extension-link';
 import { Extension } from '@tiptap/core';
 import { Plugin } from 'prosemirror-state';
+import { Decoration, DecorationSet } from 'prosemirror-view';
 import { marked } from 'marked';
 import { saveDocument, getDocument, deleteDocument, Document } from '../utils/db';
 import { researchTopic, analyzeText, generatePersonaFeedback, answerQuestion, analyzeImage, analyzePDFPages } from '../utils/ai';
 import toast from 'react-hot-toast';
-import AIPopup from './UI/shared/AIPopup';
 import TurndownService from 'turndown';
 import TabHeader from './Editor/TabHeader';
 import HeaderMenu from './Editor/HeaderMenu';
@@ -32,6 +32,47 @@ import {
   PlusLg,
 } from 'react-bootstrap-icons';
 import DocumentListSidebar, { DocumentListSidebarRef } from './Editor/DocumentListSidebar';
+
+// AI 선택 하이라이트를 위한 Mark 확장
+const AISelectionHighlight = Extension.create({
+  name: 'aiSelectionHighlight',
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        state: {
+          init() {
+            return DecorationSet.empty;
+          },
+          apply(tr, old) {
+            // 트랜잭션에서 AI 선택 범위를 가져옴
+            const aiSelection = tr.getMeta('aiSelection');
+            if (aiSelection) {
+              const { from, to } = aiSelection;
+              if (from !== to) {
+                const decoration = Decoration.inline(from, to, {
+                  class: 'ai-selection-highlight',
+                });
+                return DecorationSet.create(tr.doc, [decoration]);
+              }
+            }
+            // aiSelection이 null이면 하이라이트 제거
+            if (aiSelection === null) {
+              return DecorationSet.empty;
+            }
+            // 그 외의 경우 기존 decoration 유지 (mapping 적용)
+            return old.map(tr.mapping, tr.doc);
+          },
+        },
+        props: {
+          decorations(state) {
+            return this.getState(state);
+          },
+        },
+      }),
+    ];
+  },
+});
 
 // 마크다운 붙여넣기 확장
 const MarkdownPasteExtension = Extension.create({
@@ -65,9 +106,12 @@ interface EditorProps {
   documentId?: string;
   onSave?: (doc: Document) => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  onSelectionPreviewChange?: (preview: string | null) => void;
+  onSelectionRangeChange?: (range: { from: number; to: number } | null) => void;
+  onOpenTaskbar?: () => void;
 }
 
-const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void }, EditorProps>(({ onSave, onDirtyChange }, ref) => {
+const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar }, ref) => {
   const { id } = useParams<{ id: string }>();
   const documentId = id;
   const [title, setTitle] = useState('Untitled Document');
@@ -114,8 +158,6 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const [linkUrl, setLinkUrl] = useState('');
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [persona, setPersona] = useState('');
-  const [showAIPopup, setShowAIPopup] = useState(false);
-  const [selectionPreviewImage, setSelectionPreviewImage] = useState<string | null>(null);
   const [activeToolbarMenu, setActiveToolbarMenu] = useState<'text' | 'insert' | 'ai'>('text');
   const [isToolbarVisible, setIsToolbarVisible] = useState(true);
 
@@ -157,6 +199,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         placeholder: '내용을 입력하세요... ("/"를 눌러 블럭 추가)',
       }),
       MarkdownPasteExtension, // 마크다운 붙여넣기 확장 추가
+      AISelectionHighlight, // AI 선택 하이라이트 확장 추가
     ],
     content: '<p></p>',
     onUpdate: ({ editor }) => {
@@ -187,6 +230,13 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       // 에디터가 완전히 초기화된 후에 이벤트 리스너 추가
       const editorElement = editor.view.dom;
       const handleKeyDown = (event: KeyboardEvent) => {
+        // Ctrl+S 또는 Cmd+S (저장 단축키)
+        if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
+          event.preventDefault(); // 기본 브라우저 저장 동작 방지
+          handleSave(); // 저장 함수 호출
+          return;
+        }
+
         // "/" 키 입력 감지 - 항상 메뉴 열기 (앞에 텍스트가 있어도)
         if (event.key === '/') {
           event.preventDefault(); // 기본 동작 방지
@@ -665,6 +715,148 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       document.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [showSlashMenu]);
+
+  // selectionPreviewImage가 변경될 때 부모 컴포넌트에 알림
+  useEffect(() => {
+    onSelectionPreviewChange?.(selectedTextForAI?.text ?? null);
+    onSelectionRangeChange?.(selectedTextForAI ? { from: selectedTextForAI.from, to: selectedTextForAI.to } : null);
+  }, [selectedTextForAI, onSelectionPreviewChange, onSelectionRangeChange]);
+
+  // 선택된 영역을 마크다운으로 가져오는 함수
+  const getSelectionAsMarkdown = (from: number, to: number): string => {
+    if (!editor) return '';
+    
+    try {
+      const results: string[] = [];
+      let inHeading = false;
+      let headingLevel = 0;
+      let inListItem = false;
+      let listType = '';
+      let listLevel = 0;
+      
+      editor.state.doc.nodesBetween(from, to, (node, pos) => {
+        const nodeStart = pos;
+        const nodeEnd = pos + node.nodeSize;
+        
+        // 선택 범위와 겹치는지 확인
+        if (nodeEnd < from || nodeStart > to) {
+          return false;
+        }
+        
+        // 블록 시작 처리
+        if (node.type.name === 'heading') {
+          headingLevel = node.attrs.level || 1;
+          inHeading = true;
+          results.push('\n' + '#'.repeat(headingLevel) + ' ');
+          return true;
+        }
+        
+        if (node.type.name === 'paragraph') {
+          if (results.length > 0 && !inListItem && !results[results.length - 1].endsWith('\n\n')) {
+            results.push('\n\n');
+          }
+          return true;
+        }
+        
+        if (node.type.name === 'bulletList') {
+          listLevel++;
+          listType = 'bullet';
+          return true;
+        }
+        
+        if (node.type.name === 'orderedList') {
+          listLevel++;
+          listType = 'ordered';
+          return true;
+        }
+        
+        if (node.type.name === 'listItem') {
+          const indent = '  '.repeat(listLevel - 1);
+          if (results.length > 0 && !results[results.length - 1].endsWith('\n')) {
+            results.push('\n');
+          }
+          if (listType === 'ordered') {
+            results.push(indent + '1. ');
+          } else {
+            results.push(indent + '- ');
+          }
+          inListItem = true;
+          return true;
+        }
+        
+        if (node.type.name === 'codeBlock') {
+          results.push('\n```\n');
+          const text = node.textContent;
+          results.push(text);
+          results.push('\n```\n');
+          return false;
+        }
+        
+        if (node.type.name === 'blockquote') {
+          results.push('\n> ');
+          return true;
+        }
+        
+        if (node.type.name === 'hardBreak') {
+          results.push('  \n');
+          return false;
+        }
+        
+        // 텍스트 노드 처리
+        if (node.isText) {
+          const start = Math.max(from, nodeStart);
+          const end = Math.min(to, nodeEnd);
+          
+          if (start < end) {
+            let text = node.text?.substring(start - nodeStart, end - nodeStart) || '';
+            
+            // 마크 적용
+            node.marks.forEach((mark: any) => {
+              if (mark.type.name === 'bold') {
+                text = `**${text}**`;
+              } else if (mark.type.name === 'italic') {
+                text = `*${text}*`;
+              } else if (mark.type.name === 'code') {
+                text = `\`${text}\``;
+              } else if (mark.type.name === 'link') {
+                const href = mark.attrs.href || '';
+                text = `[${text}](${href})`;
+              } else if (mark.type.name === 'strike') {
+                text = `~~${text}~~`;
+              }
+            });
+            
+            results.push(text);
+          }
+        }
+        
+        // 블록 종료 처리
+        if (nodeEnd <= to) {
+          if (node.type.name === 'heading') {
+            inHeading = false;
+            results.push('\n');
+          }
+          if (node.type.name === 'listItem') {
+            inListItem = false;
+          }
+          if (node.type.name === 'bulletList' || node.type.name === 'orderedList') {
+            listLevel--;
+            if (listLevel === 0) {
+              listType = '';
+            }
+          }
+        }
+        
+        return true;
+      });
+      
+      return results.join('').trim();
+    } catch (error) {
+      console.error('Error getting selection as markdown:', error);
+      // 실패하면 기본 텍스트 반환
+      return editor.state.doc.textBetween(from, to);
+    }
+  };
 
   const markdownToHtml = (markdown: string): string => {
     // marked 라이브러리를 사용해서 마크다운을 HTML로 변환
@@ -1189,11 +1381,14 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     try {
       // Get the current tab to check content type
       const currentTab = tabs.find(tab => tab.id === activeTabId);
-      const isMarkdown = currentTab?.contentType === 'markdown';
+      if (!currentTab) {
+        toast.error('저장할 탭을 찾을 수 없습니다.');
+        return;
+      }
       
       // Get content based on type
       let contentToSave: string;
-      if (isMarkdown) {
+      if (currentTab.contentType === 'markdown') {
         // For markdown, convert HTML back to markdown for storage
         const htmlContent = editor.getHTML();
         contentToSave = htmlToMarkdown(htmlContent);
@@ -1202,8 +1397,8 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         contentToSave = editor.getHTML();
       }
 
-      // Get current tab's document ID or generate new one
-      const docId = currentTab?.documentId || Date.now().toString();
+      // Use existing document ID if available, otherwise create new one
+      const docId = currentTab.documentId || Date.now().toString();
       
       // Prepare document data
       const now = new Date();
@@ -1211,7 +1406,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         id: docId,
         title: title || 'Untitled Document',
         content: contentToSave,
-        contentType: isMarkdown ? 'markdown' : 'html',
+        contentType: currentTab.contentType || 'html',
         createdAt: now,
         updatedAt: now,
       };
@@ -1220,12 +1415,20 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       await saveDocument(doc);
       
       // Update the tab with saved content and document ID
-      setTabs(tabs.map(tab => 
+      const updatedTabs = tabs.map(tab => 
         tab.id === activeTabId 
-          ? { ...tab, content: contentToSave, title: doc.title, documentId: docId }
+          ? { 
+              ...tab, 
+              content: contentToSave, 
+              title: doc.title, 
+              documentId: docId,
+              contentType: (currentTab.contentType || 'html') as 'markdown' | 'html'
+            }
           : tab
-      ));
-
+      );
+      
+      setTabs(updatedTabs);
+      
       // Call callbacks
       onSave?.(doc);
       onDirtyChange?.(false);
@@ -1243,7 +1446,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const handleAIResearch = async () => {
     if (!editor) return;
     const { from, to } = editor.state.selection;
-    const selectedText = editor.state.doc.textBetween(from, to);
+    const selectedText = getSelectionAsMarkdown(from, to);
     if (!selectedText.trim()) {
       toast.error('연구할 텍스트를 선택해주세요.');
       return;
@@ -1265,7 +1468,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const handleAIAnalyze = async () => {
     if (!editor) return;
     const { from, to } = editor.state.selection;
-    const selectedText = editor.state.doc.textBetween(from, to);
+    const selectedText = getSelectionAsMarkdown(from, to);
     if (!selectedText.trim()) {
       toast.error('분석할 텍스트를 선택해주세요.');
       return;
@@ -1287,7 +1490,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const handleAIPersonaFeedback = async () => {
     if (!editor) return;
     const { from, to } = editor.state.selection;
-    const selectedText = editor.state.doc.textBetween(from, to);
+    const selectedText = getSelectionAsMarkdown(from, to);
     if (!selectedText.trim()) {
       toast.error('피드백을 받을 텍스트를 선택해주세요.');
       return;
@@ -1303,7 +1506,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const handleAIAnswer = async () => {
     if (!editor) return;
     const { from, to } = editor.state.selection;
-    const selectedText = editor.state.doc.textBetween(from, to);
+    const selectedText = getSelectionAsMarkdown(from, to);
     if (!selectedText.trim()) {
       toast.error('답변을 받을 질문을 선택해주세요.');
       return;
@@ -1445,112 +1648,28 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     toast.success('AI 응답이 적용되었습니다.');
   };
 
-  // AI 팝업 메시지 핸들러
-  const handleAIPopupMessage = async (message: string, files?: Array<{name: string; type: 'image' | 'pdf'; data: string; size: number; pageCount?: number}>): Promise<string> => {
-    try {
-      // 파일이 있는 경우 멀티모달 분석
-      if (files && files.length > 0) {
-        const imageFiles = files.filter(f => f.type === 'image');
-        const pdfFiles = files.filter(f => f.type === 'pdf');
-        
-        let response = '';
-        
-        // 이미지 분석
-        for (const imageFile of imageFiles) {
-          const imageResponse = await analyzeImage(imageFile.data, message);
-          response += `\n\n### ${imageFile.name} 분석:\n${imageResponse}`;
-        }
-        
-        // PDF 분석
-        for (const pdfFile of pdfFiles) {
-          try {
-            // JSON 문자열에서 페이지 이미지 배열 파싱
-            const pageImages = JSON.parse(pdfFile.data) as string[];
-            const pdfResponse = await analyzePDFPages(pageImages, message);
-            response += `\n\n### ${pdfFile.name} 분석 (${pdfFile.pageCount}페이지):\n${pdfResponse}`;
-          } catch (error) {
-            console.error('PDF parsing error:', error);
-            response += `\n\n### ${pdfFile.name}: PDF 분석 중 오류가 발생했습니다.`;
-          }
-        }
-        
-        return response.trim() || '파일 분석을 완료했습니다.';
-      }
-      
-      // 파일이 없는 경우 기존 텍스트 기반 처리
-      const documentContext = editor?.getText() || '';
-      const contextualPrompt = documentContext 
-        ? `문서 컨텍스트:\n${documentContext.slice(0, 500)}...\n\n사용자 질문: ${message}`
-        : message;
-
-      // 간단한 질문-답변 형식으로 처리
-      const response = await answerQuestion(contextualPrompt);
-      return response;
-    } catch (error) {
-      console.error('AI popup message error:', error);
-      throw new Error('AI 응답 생성 중 오류가 발생했습니다.');
-    }
-  };
-
-  // AI 팝업 열기: 현재 선택된 텍스트가 있으면 preview로 전달
-  const openAIPopup = () => {
-    setSelectionPreviewImage(null);
-
-    if (editor) {
-      try {
-        const { from, to } = editor.state.selection;
-        const selectedText = editor.state.doc.textBetween(from, to);
-        if (selectedText && selectedText.trim()) {
-          setSelectedTextForAI({ from, to, text: selectedText });
-
-          // Get HTML with styling from editor
-          const selectedHTML = editor.view.domAtPos(from).node.parentElement?.innerHTML || '';
-          
-          // Try to get styled HTML fragment
-          setTimeout(() => {
-            try {
-              const sel = window.getSelection();
-              if (!sel || sel.rangeCount === 0) {
-                setSelectionPreviewImage(null);
-                return;
-              }
-
-              const range = sel.getRangeAt(0);
-              const fragment = range.cloneContents();
-              const tempDiv = document.createElement('div');
-              tempDiv.appendChild(fragment);
-              const styledHTML = tempDiv.innerHTML;
-              
-              // Store the styled HTML as preview
-              if (styledHTML && styledHTML.trim()) {
-                setSelectionPreviewImage(styledHTML);
-              } else {
-                setSelectionPreviewImage(null);
-              }
-            } catch (err) {
-              // fallback to text preview only
-              setSelectionPreviewImage(null);
-            }
-          }, 10);
-        } else {
-          setSelectedTextForAI(null);
-        }
-      } catch (e) {
-        setSelectedTextForAI(null);
-      }
-    }
-
-    setShowAIPopup(true);
-  };
-
-  const clearSelection = () => {
-    setSelectionPreviewImage(null);
-    setSelectedTextForAI(null);
-  };
-
   useImperativeHandle(ref, () => ({
     handleSave,
     saveEditorStateToCookie,
+    replaceSelection: (text: string) => {
+      if (editor) {
+        editor.chain().focus().insertContent(text).run();
+      }
+    },
+    highlightSelection: (from: number, to: number) => {
+      if (editor) {
+        // AI 선택 범위를 트랜잭션 메타데이터로 전달
+        const tr = editor.state.tr.setMeta('aiSelection', { from, to });
+        editor.view.dispatch(tr);
+      }
+    },
+    clearHighlight: () => {
+      if (editor) {
+        // 하이라이트 제거
+        const tr = editor.state.tr.setMeta('aiSelection', null);
+        editor.view.dispatch(tr);
+      }
+    },
   }));
 
   if (!editor) {
@@ -1925,16 +2044,6 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         onCancel={handlePersonaCancel}
       />
       
-      {/* AI 팝업 */}
-      <AIPopup
-        isOpen={showAIPopup}
-        onClose={() => setShowAIPopup(false)}
-        onSendMessage={handleAIPopupMessage}
-        selectionPreview={selectionPreviewImage ?? selectedTextForAI?.text ?? null}
-        isLoading={isAiLoading}
-        onClearSelection={clearSelection}
-      />
-      
       {/* 플로팅 툴바 - 하단 중앙 고정 (Figma 스타일) - 메뉴 기반 */}
       <FloatingToolbar
         editor={editor}
@@ -1958,7 +2067,34 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       
       {/* AI 요청 버튼 - 화면 우측 하단 고정 (플로팅 툴바와 같은 높이) */}
       <button
-        onClick={openAIPopup}
+        onClick={() => {
+          // AI 버튼 클릭 시 선택된 텍스트를 캡처해서 Taskbar에 전달
+          if (editor) {
+            try {
+              const { from, to } = editor.state.selection;
+              const selectedText = getSelectionAsMarkdown(from, to);
+              if (selectedText && selectedText.trim()) {
+                setSelectedTextForAI({ from, to, text: selectedText });
+                onSelectionPreviewChange?.(selectedText);
+                onSelectionRangeChange?.({ from, to });
+                // AI 버튼 클릭 시 하이라이트 표시
+                if (editor) {
+                  const tr = editor.state.tr.setMeta('aiSelection', { from, to });
+                  editor.view.dispatch(tr);
+                }
+              } else {
+                setSelectedTextForAI(null);
+                onSelectionPreviewChange?.(null);
+                onSelectionRangeChange?.(null);
+              }
+            } catch (e) {
+              setSelectedTextForAI(null);
+              onSelectionPreviewChange?.(null);
+              onSelectionRangeChange?.(null);
+            }
+          }
+          onOpenTaskbar?.();
+        }}
         className="fixed bottom-10 right-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full p-4 shadow-lg transition-all hover:scale-110 hover:shadow-xl z-50"
         title="AI 어시스턴트"
       >

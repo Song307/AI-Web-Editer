@@ -81,7 +81,7 @@ const HeaderMenu: React.FC<HeaderMenuProps> = ({
         {/* 좌측 버튼들 */}
         <div className="flex items-center gap-2">
           {/* 문서 목록 토글 버튼 */}
-          <div className="tooltip-container">
+          <div className="tooltip-container tooltip-top">
             <button
               onClick={toggleDocumentList}
               className={`p-1.5 rounded-lg transition-all ${
@@ -97,7 +97,7 @@ const HeaderMenu: React.FC<HeaderMenuProps> = ({
           </div>
           
           {/* 저장 버튼 */}
-          <div className="tooltip-container">
+          <div className="tooltip-container tooltip-top">
             <button
               onClick={onSave}
               className="p-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 transition-all"
@@ -108,7 +108,7 @@ const HeaderMenu: React.FC<HeaderMenuProps> = ({
           </div>
           
           {/* 검색 버튼 */}
-          <div className="tooltip-container">
+          <div className="tooltip-container tooltip-top">
             <button
               onClick={onSearchClick}
               className={`p-1.5 rounded-lg transition-all ${
@@ -123,7 +123,7 @@ const HeaderMenu: React.FC<HeaderMenuProps> = ({
           </div>
           
           {/* 목차 버튼 */}
-          <div className="tooltip-container">
+          <div className="tooltip-container tooltip-top">
             <button
               onClick={onTocClick}
               className={`p-1.5 rounded-lg transition-all ${
@@ -138,7 +138,7 @@ const HeaderMenu: React.FC<HeaderMenuProps> = ({
           </div>
           
           {/* 튜토리얼 버튼 */}
-          <div className="tooltip-container">
+          <div className="tooltip-container tooltip-top">
             <button
               onClick={() => {/* 튜토리얼 기능은 나중에 구현 */}}
               className="p-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 transition-all"
