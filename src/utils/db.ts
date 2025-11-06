@@ -264,15 +264,63 @@ export const getDocument = async (id: string): Promise<Document | null> => {
 };
 
 export const getAllDocuments = async (): Promise<Document[]> => {
-  if (!db) await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db!.transaction([DOCUMENTS_STORE], 'readonly');
-    const store = transaction.objectStore(DOCUMENTS_STORE);
-    const request = store.getAll();
-
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-  });
+  console.log('getAllDocuments called');
+  
+  try {
+    if (!db) {
+      console.log('Database not initialized, initializing...');
+      await initDB();
+      if (!db) {
+        throw new Error('Database initialization failed');
+      }
+    }
+    
+    console.log('Database connection established, creating transaction...');
+    
+    return new Promise((resolve, reject) => {
+      try {
+        const transaction = db!.transaction([DOCUMENTS_STORE], 'readonly');
+        console.log('Transaction created, getting object store...');
+        
+        const store = transaction.objectStore(DOCUMENTS_STORE);
+        console.log('Object store retrieved, creating request...');
+        
+        const request = store.getAll();
+        console.log('Request created, setting up handlers...');
+        
+        request.onerror = () => {
+          console.error('Error in getAll request:', request.error);
+          reject(request.error || new Error('Unknown error in getAll request'));
+        };
+        
+        request.onsuccess = () => {
+          console.log('getAll request successful, result:', request.result);
+          if (!Array.isArray(request.result)) {
+            console.error('Unexpected result format:', request.result);
+            reject(new Error('Expected an array of documents'));
+            return;
+          }
+          resolve(request.result);
+        };
+        
+        transaction.oncomplete = () => {
+          console.log('Transaction completed');
+        };
+        
+        transaction.onerror = (event) => {
+          console.error('Transaction error:', event);
+          reject(transaction.error || new Error('Unknown transaction error'));
+        };
+        
+      } catch (error) {
+        console.error('Error in getAllDocuments promise:', error);
+        reject(error);
+      }
+    });
+  } catch (error) {
+    console.error('Error in getAllDocuments function:', error);
+    throw error;
+  }
 };
 
 export const deleteDocument = async (id: string): Promise<void> => {

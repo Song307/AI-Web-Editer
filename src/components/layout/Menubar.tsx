@@ -45,7 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      <aside className={`bg-white dark:bg-gray-800 rounded-xl shadow-xl flex flex-col border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent transition-all duration-300 ${
+      <aside className={`bg-white dark:bg-gray-800 rounded-xl shadow-xl flex flex-col border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent transition-all duration-300 h-[calc(100vh-48px)] ${
         isSidebarOpen ? 'p-6' : 'p-3'
       } ${isSidebarOpen ? 'relative z-50' : 'relative z-30'}`}>
         {/* Sidebar Toggle Button */}
@@ -150,7 +150,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Document List - Only show when sidebar is open */}
-        {(window.location.pathname.startsWith('/documents') || window.location.pathname === '/') && isSidebarOpen && (
+        {false && (window.location.pathname.startsWith('/documents') || window.location.pathname === '/') && isSidebarOpen && (
           <div className="document-list">
             <div className="flex items-center justify-between mb-3">
               <h2 className="m-0 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">

@@ -3,44 +3,49 @@ import Modal from './Modal';
 import ModalHeader from './ModalHeader';
 import ModalBody from './ModalBody';
 import ModalFooter from './ModalFooter';
+import Input from './Input';
 import Button from './Button';
 
-interface ConfirmModalProps {
-  title: string;
-  message?: string;
+interface InputModalProps {
+  title?: string;
+  label?: string;
+  placeholder?: string;
+  value: string;
   confirmText?: string;
   cancelText?: string;
-  deleteText?: string;
   isOpen: boolean;
-  onConfirm?: () => void;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
   onCancel: () => void;
-  onDelete?: () => void;
   size?: 'small' | 'medium' | 'large';
-  variant?: 'default' | 'danger';
-  children?: React.ReactNode;
+  required?: boolean;
+  error?: string;
 }
 
-const ConfirmModal: React.FC<ConfirmModalProps> = ({
-  title,
-  message,
+const InputModal: React.FC<InputModalProps> = ({
+  title = '입력',
+  label,
+  placeholder,
+  value,
   confirmText = '확인',
   cancelText = '취소',
-  deleteText,
   isOpen,
+  onChange,
   onConfirm,
   onCancel,
-  onDelete,
   size = 'small',
-  variant = 'default',
-  children,
+  required = false,
+  error,
 }) => {
-  // ESC 키 이벤트 처리
+  // ESC 키와 Enter 키 이벤트 처리
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onCancel();
+      } else if (e.key === 'Enter' && !error) {
+        onConfirm();
       }
     };
 
@@ -48,7 +53,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onCancel]);
+  }, [isOpen, onCancel, onConfirm, error]);
 
   if (!isOpen) return null;
 
@@ -56,32 +61,25 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     <Modal size={size} onClose={onCancel}>
       <ModalHeader fileName={title} onClose={onCancel} />
       <ModalBody>
-        {message && (
-          <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-            {message}
-          </p>
-        )}
-        {children}
+        <Input
+          label={label}
+          placeholder={placeholder}
+          value={value}
+          onChange={onChange}
+          required={required}
+          error={error}
+        />
       </ModalBody>
       <ModalFooter>
         <Button variant="secondary" onClick={onCancel}>
           {cancelText}
         </Button>
-        {onDelete && (
-          <Button variant="danger" onClick={onDelete}>
-            {deleteText}
-          </Button>
-        )}
-        {onConfirm && (
-          <Button variant={variant === 'danger' ? 'danger' : 'primary'} onClick={onConfirm}>
-            {confirmText}
-          </Button>
-        )}
+        <Button variant="primary" onClick={onConfirm} disabled={!!error}>
+          {confirmText}
+        </Button>
       </ModalFooter>
     </Modal>
   );
 };
 
-export default ConfirmModal;
-
-
+export default InputModal;

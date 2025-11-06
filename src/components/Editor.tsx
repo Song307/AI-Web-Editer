@@ -1,6 +1,8 @@
 import React, { useState, forwardRef, useImperativeHandle, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
+import RenameModal from './UI/shared/RenameModal';
+import TabCloseConfirmModal from './UI/shared/TabCloseConfirmModal';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Heading from '@tiptap/extension-heading';
@@ -14,30 +16,22 @@ import { Link } from '@tiptap/extension-link';
 import { Extension } from '@tiptap/core';
 import { Plugin } from 'prosemirror-state';
 import { marked } from 'marked';
-import { saveDocument, getDocument, Document } from '../utils/db';
+import { saveDocument, getDocument, deleteDocument, Document } from '../utils/db';
 import { researchTopic, analyzeText, generatePersonaFeedback, answerQuestion, analyzeImage, analyzePDFPages } from '../utils/ai';
 import toast from 'react-hot-toast';
-import RenameModal from './UI/shared/RenameModal';
 import AIPopup from './UI/shared/AIPopup';
 import TurndownService from 'turndown';
+import TabHeader from './Editor/TabHeader';
+import HeaderMenu from './Editor/HeaderMenu';
+import LeftSidebar from './Editor/LeftSidebar';
+import FloatingToolbar from './Editor/FloatingToolbar';
+import { DocumentTab } from './Editor/types';
 import { 
-  TypeBold, 
-  TypeItalic, 
-  TypeStrikethrough, 
-  TypeH1, 
-  TypeH2, 
-  TypeH3, 
-  ListUl, 
-  ListOl, 
-  ListCheck, 
-  Link45deg, 
-  Image as ImageIcon,
-  Code,
-  Quote,
-  Dash,
-  CheckSquare,
-  Robot
+  Robot,
+  X,
+  PlusLg,
 } from 'react-bootstrap-icons';
+import DocumentListSidebar, { DocumentListSidebarRef } from './Editor/DocumentListSidebar';
 
 // 마크다운 붙여넣기 확장
 const MarkdownPasteExtension = Extension.create({
@@ -73,18 +67,48 @@ interface EditorProps {
   onDirtyChange?: (isDirty: boolean) => void;
 }
 
-const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, onDirtyChange }, ref) => {
+const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void }, EditorProps>(({ onSave, onDirtyChange }, ref) => {
   const { id } = useParams<{ id: string }>();
   const documentId = id;
   const [title, setTitle] = useState('Untitled Document');
+  const [tabs, setTabs] = useState<DocumentTab[]>([
+    { id: '1', title: 'Untitled Document', content: '', isActive: true, documentId: documentId || undefined }
+  ]);
+  const [activeTabId, setActiveTabId] = useState('1');
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(() => {
+    const saved = localStorage.getItem('isSearchOpen');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [leftSidebarTab, setLeftSidebarTab] = useState<'search' | 'toc' | null>(() => {
+    const saved = localStorage.getItem('leftSidebarTab');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [isDocumentListOpen, setIsDocumentListOpen] = useState(() => {
+    const saved = localStorage.getItem('isDocumentListOpen');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{ index: number; text: string }>>([]);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [tableOfContents, setTableOfContents] = useState<Array<{ level: number; text: string; pos: number }>>([]);
+  const [toolbarOffset, setToolbarOffset] = useState(0);
+  const [isToolbarHiddenByWidth, setIsToolbarHiddenByWidth] = useState(false);
   const [aiResponse, setAiResponse] = useState<string>('');
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [isTabCloseConfirmModalOpen, setIsTabCloseConfirmModalOpen] = useState(false);
+  const [tabToClose, setTabToClose] = useState<string | null>(null);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 });
   const [selectedMenuIndex, setSelectedMenuIndex] = useState(0);
   const [selectedTextForAI, setSelectedTextForAI] = useState<{ from: number; to: number; text: string } | null>(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [showImageUrlModal, setShowImageUrlModal] = useState(false);
+
+  // DocumentListSidebar ref
+  const documentListSidebarRef = useRef<DocumentListSidebarRef>(null);
   const [imageUrl, setImageUrl] = useState('');
   const [showLinkUrlModal, setShowLinkUrlModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -92,6 +116,8 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
   const [persona, setPersona] = useState('');
   const [showAIPopup, setShowAIPopup] = useState(false);
   const [selectionPreviewImage, setSelectionPreviewImage] = useState<string | null>(null);
+  const [activeToolbarMenu, setActiveToolbarMenu] = useState<'text' | 'insert' | 'ai'>('text');
+  const [isToolbarVisible, setIsToolbarVisible] = useState(true);
 
   const editor = useEditor({
     extensions: [
@@ -310,6 +336,172 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
     }
   }, [isEditorReady, editor]); // showSlashMenu 제거
 
+  // 툴바 위치 계산 - 검색 사이드바와 문서 목록 사이드바 상태에 따라 조정
+  useEffect(() => {
+    const updateToolbarPosition = () => {
+      // 에디터 컨테이너의 실제 너비 확인
+      const editorContainer = document.getElementById('editor-container');
+
+      // 왼쪽 사이드바들의 너비 계산 (둘 다 열려있을 수 있음)
+      const searchSidebarWidth = isSearchOpen ? 320 : 0;
+      const documentListSidebarWidth = isDocumentListOpen ? 320 : 0;
+      const sidebarWidth = searchSidebarWidth + documentListSidebarWidth;
+
+      // 화면 전체 너비에서 사이드바 너비를 빼면 에디터 영역의 너비
+      const availableWidth = window.innerWidth - sidebarWidth;
+
+      // 에디터 영역의 중앙은 사이드바 너비 + (사용가능한 너비 / 2)
+      const editorCenterX = sidebarWidth + (availableWidth / 2);
+
+      // 화면의 중앙
+      const viewportCenter = window.innerWidth / 2;
+
+      // 툴바를 이동시켜야 할 거리
+      const offset = editorCenterX - viewportCenter;
+
+      setToolbarOffset(offset);
+
+      // 에디터 컨테이너의 실제 너비로 판단 (더 정확함)
+      if (editorContainer) {
+        const containerWidth = editorContainer.getBoundingClientRect().width;
+        setIsToolbarHiddenByWidth(containerWidth < 800);
+      } else {
+        // fallback: availableWidth에서 좌우 마진 48px 제외
+        const editorContentWidth = availableWidth - 48;
+        setIsToolbarHiddenByWidth(editorContentWidth < 800);
+      }
+    };
+
+    // 즉시 한 번 실행
+    updateToolbarPosition();
+
+    // transition이 완료된 후에도 한 번 더 실행 (300ms 후)
+    const timeoutId = setTimeout(updateToolbarPosition, 350);
+
+    window.addEventListener('resize', updateToolbarPosition);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', updateToolbarPosition);
+    };
+  }, [isSearchOpen, isDocumentListOpen]);
+
+  // 목차 실시간 업데이트
+  useEffect(() => {
+    if (!editor) return;
+
+    const updateTOC = () => {
+      const headings: Array<{ level: number; text: string; pos: number }> = [];
+      
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'heading') {
+          headings.push({
+            level: node.attrs.level,
+            text: node.textContent,
+            pos: pos
+          });
+        }
+      });
+
+      setTableOfContents(headings);
+    };
+
+    // 초기 목차 생성
+    updateTOC();
+
+    // 에디터 내용 변경 시 목차 업데이트
+    const handleUpdate = () => {
+      updateTOC();
+    };
+
+    editor.on('update', handleUpdate);
+
+    return () => {
+      editor.off('update', handleUpdate);
+    };
+  }, [editor]);
+
+  // 쿠키에 에디터 상태 저장
+  const saveEditorStateToCookie = () => {
+    if (!editor) return;
+
+    const editorState = {
+      tabs: tabs.map(tab => ({
+        ...tab,
+        // 현재 활성 탭이면 최신 에디터 내용으로 업데이트
+        content: tab.id === activeTabId ? editor.getHTML() : tab.content
+      })),
+      activeTabId,
+    };
+
+    // 쿠키에 저장 (7일 유효)
+    const expirationDate = new Date();
+    expirationDate.setDate(expirationDate.getDate() + 7);
+    document.cookie = `editorState=${encodeURIComponent(JSON.stringify(editorState))}; expires=${expirationDate.toUTCString()}; path=/`;
+  };
+
+  // 쿠키에서 에디터 상태 로드
+  const loadEditorStateFromCookie = () => {
+    const cookies = document.cookie.split('; ');
+    const editorStateCookie = cookies.find(cookie => cookie.startsWith('editorState='));
+    
+    if (editorStateCookie) {
+      try {
+        const editorStateStr = decodeURIComponent(editorStateCookie.split('=')[1]);
+        const editorState = JSON.parse(editorStateStr);
+        
+        if (editorState.tabs && editorState.tabs.length > 0) {
+          setTabs(editorState.tabs);
+          setActiveTabId(editorState.activeTabId || editorState.tabs[0].id);
+          
+          // 활성 탭의 내용을 에디터에 로드
+          const activeTab = editorState.tabs.find((tab: DocumentTab) => tab.id === editorState.activeTabId);
+          if (activeTab && editor) {
+            editor.commands.setContent(activeTab.content || '<p></p>');
+          }
+          return true;
+        }
+      } catch (error) {
+        console.error('쿠키에서 에디터 상태 로드 실패:', error);
+      }
+    }
+    return false;
+  };
+
+  // 컴포넌트 마운트 시 쿠키에서 상태 복원
+  useEffect(() => {
+    if (isEditorReady && editor && !documentId) {
+      // documentId가 없을 때만 쿠키에서 복원 (새 문서 작성 중일 때)
+      loadEditorStateFromCookie();
+    }
+  }, [isEditorReady, editor, documentId]);
+
+  // 탭이나 에디터 내용이 변경될 때마다 쿠키에 자동 저장 (디바운스 적용)
+  useEffect(() => {
+    if (!editor || !isEditorReady) return;
+
+    const timeoutId = setTimeout(() => {
+      saveEditorStateToCookie();
+    }, 1000); // 1초 디바운스
+
+    return () => clearTimeout(timeoutId);
+  }, [tabs, activeTabId, editor?.state.doc, isEditorReady]);
+
+  // 문서 목록 사이드바 상태 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('isDocumentListOpen', JSON.stringify(isDocumentListOpen));
+  }, [isDocumentListOpen]);
+
+  // 좌측 사이드바 탭 상태 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('leftSidebarTab', JSON.stringify(leftSidebarTab));
+  }, [leftSidebarTab]);
+
+  // 검색 사이드바 열림/닫힘 상태 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('isSearchOpen', JSON.stringify(isSearchOpen));
+  }, [isSearchOpen]);
+
   // 에디터가 준비된 후 문서 로딩
   useEffect(() => {
     if (isEditorReady && editor) {
@@ -320,6 +512,10 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
             // 마크다운을 HTML로 변환해서 로드
             const htmlContent = markdownToHtml(doc.content);
             editor.commands.setContent(htmlContent);
+            // 첫 번째 탭의 documentId 설정
+            setTabs(tabs.map((tab, index) => 
+              index === 0 ? { ...tab, documentId: documentId, content: htmlContent, title: doc.title } : tab
+            ));
             onDirtyChange?.(false);
           }
         });
@@ -625,25 +821,423 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
     item.action();
   };
 
+  // 탭 관리 함수들
+  const handleTabClick = (tabId: string) => {
+    if (!editor) return;
+
+    // 현재 활성 탭의 내용 저장 (변경사항이 있는 경우에만)
+    const currentTab = tabs.find(t => t.id === activeTabId);
+    if (currentTab) {
+      const currentHtml = editor.getHTML();
+      const hasChanges = currentTab.content !== currentHtml;
+      
+      if (hasChanges) {
+        // 변경사항이 있는 경우에만 탭 내용 업데이트
+        setTabs(tabs.map(tab => 
+          tab.id === currentTab.id 
+            ? { 
+                ...tab, 
+                content: currentHtml,
+                isActive: false 
+              }
+            : { 
+                ...tab, 
+                isActive: tab.id === tabId 
+              }
+        ));
+      } else {
+        // 변경사항이 없는 경우 isActive만 업데이트
+        setTabs(tabs.map(tab => ({
+          ...tab,
+          isActive: tab.id === tabId
+        })));
+      }
+    }
+
+    // 새 탭 활성화
+    setActiveTabId(tabId);
+    const newActiveTab = tabs.find(t => t.id === tabId);
+    
+    if (newActiveTab) {
+      // 탭 내용 로드
+      if (newActiveTab.contentType === 'markdown') {
+        // Markdown인 경우 HTML로 변환하여 표시
+        try {
+          const htmlContent = markdownToHtml(newActiveTab.content);
+          editor.commands.setContent(htmlContent);
+        } catch (error) {
+          console.error('Error rendering markdown:', error);
+          editor.commands.setContent(newActiveTab.content);
+        }
+      } else {
+        // HTML인 경우 그대로 표시
+        editor.commands.setContent(newActiveTab.content || '');
+      }
+      
+      // 타이틀 업데이트
+      setTitle(newActiveTab.title);
+      
+      // 스크롤 맨 위로 이동
+      window.scrollTo(0, 0);
+    }
+  };
+
+  const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (tabs.length === 1) {
+      toast.error('마지막 탭은 닫을 수 없습니다.');
+      return;
+    }
+
+    const tab = tabs.find(t => t.id === tabId);
+    if (tab) {
+      // 현재 에디터의 내용 가져오기
+      const currentContent = editor?.getHTML() || '';
+      
+      // 원본 내용과 현재 내용 비교 (앞뒤 공백 제거 후 비교)
+      const hasUnsavedChanges = currentContent.trim() !== tab.content.trim();
+      
+      // 변경사항이 있는 경우에만 확인 모달 표시
+      if (hasUnsavedChanges) {
+        setTabToClose(tabId);
+        setIsTabCloseConfirmModalOpen(true);
+        return;
+      }
+    }
+
+    // 변경사항이 없으면 바로 닫기
+    performCloseTab(tabId);
+  };
+
+  const performCloseTab = (tabId: string) => {
+    const tabIndex = tabs.findIndex(t => t.id === tabId);
+    const newTabs = tabs.filter(t => t.id !== tabId);
+
+    // 닫힌 탭이 활성 탭이었다면 인접한 탭 활성화
+    if (tabId === activeTabId) {
+      const newActiveIndex = tabIndex > 0 ? tabIndex - 1 : 0;
+      const newActiveTab = newTabs[newActiveIndex];
+      setActiveTabId(newActiveTab.id);
+      if (editor) {
+        editor.commands.setContent(newActiveTab.content);
+        setTitle(newActiveTab.title);
+      }
+    }
+
+    setTabs(newTabs);
+  };
+
+  const handleTabCloseConfirm = (action: 'delete' | 'save' | 'cancel') => {
+    if (!tabToClose) return;
+
+    switch (action) {
+      case 'delete':
+        performCloseTab(tabToClose);
+        break;
+      case 'save':
+        // 저장 기능은 나중에 구현
+        performCloseTab(tabToClose);
+        break;
+      case 'cancel':
+        // 아무것도 하지 않음
+        break;
+    }
+
+    setIsTabCloseConfirmModalOpen(false);
+    setTabToClose(null);
+  };
+
+  const handleAddTab = () => {
+    const newTabId = Date.now().toString();
+    const newTab: DocumentTab = {
+      id: newTabId,
+      title: 'Untitled Document',
+      content: '',
+      isActive: false
+    };
+
+    // 현재 활성 탭의 내용 저장
+    if (editor) {
+      const htmlContent = editor.getHTML();
+      setTabs([
+        ...tabs.map(tab => ({ ...tab, content: tab.id === activeTabId ? htmlContent : tab.content, isActive: false })),
+        newTab
+      ]);
+    }
+
+    // 새 탭 활성화
+    setActiveTabId(newTabId);
+    setTitle('Untitled Document');
+    if (editor) {
+      editor.commands.setContent('');
+    }
+  };
+
+  // 탭 제목 변경 시 탭 목록도 업데이트
+  useEffect(() => {
+    setTabs(tabs.map(tab => 
+      tab.id === activeTabId ? { ...tab, title } : tab
+    ));
+  }, [title]);
+
+  // 드래그 앤 드롭 핸들러
+  const handleDragStart = (tabId: string) => {
+    setDraggedTabId(tabId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetTabId: string) => {
+    e.preventDefault();
+    
+    if (!draggedTabId || draggedTabId === targetTabId) return;
+
+    const draggedIndex = tabs.findIndex(tab => tab.id === draggedTabId);
+    const targetIndex = tabs.findIndex(tab => tab.id === targetTabId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newTabs = [...tabs];
+    const [draggedTab] = newTabs.splice(draggedIndex, 1);
+    newTabs.splice(targetIndex, 0, draggedTab);
+
+    setTabs(newTabs);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTabId(null);
+  };
+
+  // 검색 기능
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    
+    if (!query.trim() || !editor) {
+      setSearchResults([]);
+      setCurrentSearchIndex(0);
+      return;
+    }
+
+    const content = editor.getText();
+    const results: Array<{ index: number; text: string }> = [];
+    const lowerQuery = query.toLowerCase();
+    let index = 0;
+
+    while (index < content.length) {
+      const foundIndex = content.toLowerCase().indexOf(lowerQuery, index);
+      if (foundIndex === -1) break;
+
+      const start = Math.max(0, foundIndex - 20);
+      const end = Math.min(content.length, foundIndex + query.length + 20);
+      const contextText = content.substring(start, end);
+
+      results.push({
+        index: foundIndex,
+        text: contextText
+      });
+
+      index = foundIndex + 1;
+    }
+
+    setSearchResults(results);
+    setCurrentSearchIndex(0);
+  };
+
+  const handleSearchNavigation = (direction: 'next' | 'prev') => {
+    if (searchResults.length === 0) return;
+
+    let newIndex = currentSearchIndex;
+    if (direction === 'next') {
+      newIndex = (currentSearchIndex + 1) % searchResults.length;
+    } else {
+      newIndex = currentSearchIndex === 0 ? searchResults.length - 1 : currentSearchIndex - 1;
+    }
+
+    setCurrentSearchIndex(newIndex);
+    
+    // 에디터에서 해당 위치로 스크롤
+    if (editor && searchResults[newIndex]) {
+      const pos = searchResults[newIndex].index;
+      editor.commands.setTextSelection({ from: pos, to: pos + searchQuery.length });
+      editor.commands.focus();
+    }
+  };
+
+  // 목차 생성 함수
+  const generateTableOfContents = () => {
+    if (!editor) return [];
+
+    const headings: Array<{ level: number; text: string; pos: number }> = [];
+    
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'heading') {
+        headings.push({
+          level: node.attrs.level,
+          text: node.textContent,
+          pos: pos
+        });
+      }
+    });
+
+    return headings;
+  };
+
+  // 파일 제목 변경 핸들러
+  const handleRenameFile = () => {
+    setNewTitle(title);
+    setIsRenameModalOpen(true);
+  };
+
+  // 파일 제목 변경 확인 핸들러
+  const handleRenameConfirm = async () => {
+    if (newTitle && newTitle !== title) {
+      // 제목 업데이트
+      setTitle(newTitle);
+      
+      // 탭 제목도 업데이트
+      const updatedTabs = tabs.map(tab => 
+        tab.id === activeTabId ? { ...tab, title: newTitle } : tab
+      );
+      setTabs(updatedTabs);
+      
+      // 문서 저장
+      try {
+        const currentTab = updatedTabs.find(tab => tab.id === activeTabId);
+        if (currentTab) {
+          const markdownContent = editor ? htmlToMarkdown(editor.getHTML()) : '';
+          const now = new Date();
+          await saveDocument({
+            id: documentId || activeTabId,
+            title: newTitle,
+            content: markdownContent,
+            contentType: 'markdown',
+            updatedAt: now,
+            createdAt: now, // 기존 문서가 있다면 createdAt은 유지되어야 하지만, 간단화를 위해 현재 시간으로 설정
+          });
+          toast.success('파일 제목이 변경되어 저장되었습니다.');
+        }
+      } catch (error) {
+        console.error('파일 저장 중 오류 발생:', error);
+        toast.error('파일 저장 중 오류가 발생했습니다.');
+      }
+    }
+    setIsRenameModalOpen(false);
+  };
+
+  // 파일 제목 변경 취소 핸들러
+  const handleRenameCancel = () => {
+    setIsRenameModalOpen(false);
+  };
+
+  // 파일 내보내기 핸들러
+  const handleExportFile = () => {
+    const content = editor?.getHTML() || '';
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title || 'untitled'}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('파일이 다운로드되었습니다.');
+  };
+
+  // 파일 복사하기 핸들러
+  const handleDuplicateFile = () => {
+    const newTab = {
+      id: Date.now().toString(),
+      title: `${title} (복사본)`,
+      content: editor?.getHTML() || '',
+      isActive: true
+    };
+    
+    setTabs(prevTabs => 
+      prevTabs.map(tab => ({ ...tab, isActive: false }))
+        .concat(newTab)
+    );
+    setActiveTabId(newTab.id);
+    toast.success('파일이 복사되었습니다.');
+  };
+
+  // 파일 삭제하기 핸들러
+  const handleDeleteFile = () => {
+    if (tabs.length <= 1) {
+      toast.error('마지막 탭은 삭제할 수 없습니다.');
+      return;
+    }
+
+    const currentIndex = tabs.findIndex(tab => tab.id === activeTabId);
+    const newTabs = tabs.filter(tab => tab.id !== activeTabId);
+    
+    // 삭제 후 활성화할 탭 결정 (이전 탭 또는 다음 탭)
+    let newActiveTabId = '';
+    if (currentIndex > 0) {
+      newActiveTabId = tabs[currentIndex - 1].id;
+    } else if (tabs.length > 1) {
+      newActiveTabId = tabs[1].id;
+    }
+
+    setTabs(newTabs);
+    setActiveTabId(newActiveTabId);
+    toast.success('파일이 삭제되었습니다.');
+  };
+
   const handleSave = async () => {
     if (!editor) return;
 
-    const htmlContent = editor.getHTML();
-    const markdownContent = htmlToMarkdown(htmlContent);
+    try {
+      // Get the current tab to check content type
+      const currentTab = tabs.find(tab => tab.id === activeTabId);
+      const isMarkdown = currentTab?.contentType === 'markdown';
+      
+      // Get content based on type
+      let contentToSave: string;
+      if (isMarkdown) {
+        // For markdown, convert HTML back to markdown for storage
+        const htmlContent = editor.getHTML();
+        contentToSave = htmlToMarkdown(htmlContent);
+      } else {
+        // For HTML, store as is
+        contentToSave = editor.getHTML();
+      }
 
-    const doc: Document = {
-      id: documentId || Date.now().toString(),
-      title,
-      content: markdownContent,
-      contentType: 'markdown',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+      // Get current tab's document ID or generate new one
+      const docId = currentTab?.documentId || Date.now().toString();
+      
+      // Prepare document data
+      const now = new Date();
+      const doc: Document = {
+        id: docId,
+        title: title || 'Untitled Document',
+        content: contentToSave,
+        contentType: isMarkdown ? 'markdown' : 'html',
+        createdAt: now,
+        updatedAt: now,
+      };
 
-    await saveDocument(doc);
-    onSave?.(doc);
-    onDirtyChange?.(false);
-    toast.success('저장이 완료되었습니다');
+      // Save to database
+      await saveDocument(doc);
+      
+      // Update the tab with saved content and document ID
+      setTabs(tabs.map(tab => 
+        tab.id === activeTabId 
+          ? { ...tab, content: contentToSave, title: doc.title, documentId: docId }
+          : tab
+      ));
+
+      // Call callbacks
+      onSave?.(doc);
+      onDirtyChange?.(false);
+      
+      // Refresh document list
+      documentListSidebarRef.current?.refreshDocuments();
+      
+      toast.success('저장이 완료되었습니다');
+    } catch (error) {
+      console.error('Error saving document:', error);
+      toast.error('저장 중 오류가 발생했습니다.');
+    }
   };
 
   const handleAIResearch = async () => {
@@ -956,6 +1550,7 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
 
   useImperativeHandle(ref, () => ({
     handleSave,
+    saveEditorStateToCookie,
   }));
 
   if (!editor) {
@@ -963,180 +1558,200 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
   }
 
   return (
-    <div className="flex-1 flex flex-col relative overflow-visible pb-6 min-h-0">
-      {/* 헤더 영역 - 고정 */}
-      <div className="flex-shrink-0 flex items-center mb-4 gap-3 px-6 pt-5">
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="flex-1 text-xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 outline-none transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-          placeholder="Document Title"
+    <div className="flex-1 flex flex-col relative overflow-visible min-h-0">
+      {/* 탭 헤더 */}
+      <TabHeader
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onTabClick={handleTabClick}
+        onCloseTab={(id, e) => handleCloseTab(id, e)}
+        onAddTab={handleAddTab}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      />
+      
+      {/* 헤더 메뉴 */}
+      <HeaderMenu
+        onSave={handleSave}
+        leftSidebarTab={leftSidebarTab}
+        onSearchClick={() => {
+          if (leftSidebarTab === 'search') {
+            setLeftSidebarTab(null);
+            setIsSearchOpen(false);
+          } else {
+            setLeftSidebarTab('search');
+            setIsSearchOpen(true);
+          }
+        }}
+        onTocClick={() => {
+          if (leftSidebarTab === 'toc') {
+            setLeftSidebarTab(null);
+            setIsSearchOpen(false);
+          } else {
+            setLeftSidebarTab('toc');
+            setIsSearchOpen(true);
+          }
+        }}
+        onRenameFile={handleRenameFile}
+        onExportFile={handleExportFile}
+        onDuplicateFile={handleDuplicateFile}
+        onDeleteFile={handleDeleteFile}
+        isDocumentListOpen={isDocumentListOpen}
+        onDocumentListToggle={() => setIsDocumentListOpen(!isDocumentListOpen)}
+      />
+      
+      {/* 메인 컨텐츠 영역 - 좌측 사이드바와 에디터 */}
+      <div className="flex-1 flex relative overflow-hidden">
+        {/* 문서 목록 사이드바 */}
+        <DocumentListSidebar
+          ref={documentListSidebarRef}
+          isOpen={isDocumentListOpen}
+          onClose={() => setIsDocumentListOpen(false)}
+          onDocumentSelect={async (doc) => {
+            try {
+              // Check if the document is already open in a tab
+              const existingTab = tabs.find(tab => tab.documentId === doc.id);
+              
+              if (existingTab) {
+                // If the document is already open, switch to that tab
+                setTabs(prevTabs => 
+                  prevTabs.map(tab => ({
+                    ...tab,
+                    isActive: tab.id === existingTab.id
+                  }))
+                );
+                setActiveTabId(existingTab.id);
+                setTitle(doc.title || 'Untitled Document');
+                
+                // Load the document content
+                const loadedDoc = await getDocument(doc.id);
+                if (loadedDoc && editor) {
+                  // Convert markdown to HTML if needed
+                  const content = loadedDoc.contentType === 'markdown' 
+                    ? markdownToHtml(loadedDoc.content) 
+                    : loadedDoc.content;
+                  editor.commands.setContent(content);
+                }
+              } else {
+                // If the document is not open, load it and create a new tab
+                const loadedDoc = await getDocument(doc.id);
+                
+                if (loadedDoc) {
+                  const newTabId = Date.now().toString();
+                  const newTab = {
+                    id: newTabId,
+                    title: loadedDoc.title || 'Untitled Document',
+                    content: loadedDoc.content,
+                    isActive: true,
+                    documentId: loadedDoc.id
+                  };
+                  
+                  // Add the new tab and make it active
+                  setTabs(prevTabs => [
+                    ...prevTabs.map(tab => ({ ...tab, isActive: false })),
+                    newTab
+                  ]);
+                  
+                  setActiveTabId(newTabId);
+                  setTitle(loadedDoc.title || 'Untitled Document');
+                  
+                  // Set the editor content
+                  if (editor) {
+                    // Convert markdown to HTML if needed
+                    const content = loadedDoc.contentType === 'markdown' 
+                      ? markdownToHtml(loadedDoc.content) 
+                      : loadedDoc.content;
+                    editor.commands.setContent(content);
+                  }
+                }
+              }
+              
+              // Keep the document list open after selection
+              // Removed: setIsDocumentListOpen(false);
+            } catch (error) {
+              console.error('Error loading document:', error);
+              toast.error('문서를 불러오는 중 오류가 발생했습니다.');
+            }
+          }}
+          onDocumentDelete={async (docId) => {
+            try {
+              // Delete the document from the database
+              await deleteDocument(docId);
+              
+              // If the deleted document is currently open, close its tab
+              if (tabs.some(tab => tab.documentId === docId)) {
+                const tabToRemove = tabs.find(tab => tab.documentId === docId);
+                if (tabToRemove) {
+                  // If it's the active tab, switch to another tab
+                  if (activeTabId === tabToRemove.id) {
+                    const currentIndex = tabs.findIndex(tab => tab.id === tabToRemove.id);
+                    let newActiveTabId = '';
+                    
+                    if (tabs.length > 1) {
+                      if (currentIndex > 0) {
+                        newActiveTabId = tabs[currentIndex - 1].id;
+                      } else if (tabs.length > 1) {
+                        newActiveTabId = tabs[1].id;
+                      }
+                    }
+                    
+                    setActiveTabId(newActiveTabId);
+                  }
+                  
+                  // Remove the tab
+                  setTabs(prevTabs => prevTabs.filter(tab => tab.id !== tabToRemove.id));
+                }
+              }
+              
+              toast.success('문서가 삭제되었습니다.');
+            } catch (error) {
+              console.error('문서 삭제 중 오류 발생:', error);
+              toast.error('문서 삭제 중 오류가 발생했습니다.');
+            }
+          }}
         />
-        <button onClick={handleSave} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md font-semibold cursor-pointer transition-all hover:transform hover:-translate-y-0.5">저장</button>
-      </div>
-      
-      {/* 에디터 영역 - 툴바 포함 */}
-      <div className="flex-1 mx-6 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden flex flex-col focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 mb-6">
         
-        {/* 툴바 영역 - 에디터 내부 상단 */}
-        <div className="flex-shrink-0 flex flex-wrap gap-2 p-3 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor.isActive('bold') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="굵게 (Ctrl+B)"
-        >
-          <TypeBold size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor.isActive('italic') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="기울임 (Ctrl+I)"
-        >
-          <TypeItalic size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor.isActive('strike') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="취소선"
-        >
-          <TypeStrikethrough size={16} />
-        </button>
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
-        <button
-          onClick={() => {
-            editor?.chain().focus().toggleHeading({ level: 1 }).run();
+        {/* 검색/목차 사이드바 */}
+        <LeftSidebar
+          isOpen={isSearchOpen}
+          activeTab={leftSidebarTab}
+          searchQuery={searchQuery}
+          searchResults={searchResults}
+          currentSearchIndex={currentSearchIndex}
+          tableOfContents={tableOfContents}
+          editor={editor}
+          onClose={() => {
+            setIsSearchOpen(false);
+            setLeftSidebarTab(null);
           }}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor?.isActive('heading', { level: 1 }) ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="제목 1"
-        >
-          <TypeH1 size={16} />
-        </button>
-        <button
-          onClick={() => {
-            editor?.chain().focus().toggleHeading({ level: 2 }).run();
+          onSearchChange={handleSearch}
+          onSearchNavigation={handleSearchNavigation}
+          onSearchResultClick={(index) => {
+            setCurrentSearchIndex(index);
+            if (editor && searchResults[index]) {
+              const pos = searchResults[index].index;
+              editor.commands.setTextSelection({ from: pos, to: pos + searchQuery.length });
+              editor.commands.focus();
+            }
           }}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor?.isActive('heading', { level: 2 }) ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="제목 2"
-        >
-          <TypeH2 size={16} />
-        </button>
-        <button
-          onClick={() => {
-            editor?.chain().focus().toggleHeading({ level: 3 }).run();
+          onTocItemClick={(pos) => {
+            if (editor) {
+              editor.commands.setTextSelection({ from: pos, to: pos });
+              editor.commands.focus();
+            }
           }}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor?.isActive('heading', { level: 3 }) ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="제목 3"
-        >
-          <TypeH3 size={16} />
-        </button>
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
-        <button
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor.isActive('bulletList') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="글머리 기호 목록"
-        >
-          <ListUl size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor.isActive('orderedList') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="번호 목록"
-        >
-          <ListOl size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleTaskList().run()}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor.isActive('taskList') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="체크리스트"
-        >
-          <CheckSquare size={16} />
-        </button>
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
-        <button
-          onClick={handleLinkInsert}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor.isActive('link') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="링크"
-        >
-          <Link45deg size={16} />
-        </button>
-        <button
-          onClick={() => {
-            setImageUrl('');
-            setShowImageUrlModal(true);
-          }}
-          className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600"
-          title="이미지 삽입"
-        >
-          <ImageIcon size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor.isActive('codeBlock') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="코드 블록"
-        >
-          <Code size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          className={`px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600 ${
-            editor.isActive('blockquote') ? 'bg-blue-500 border-blue-500 text-white hover:bg-blue-600' : ''
-          }`}
-          title="인용구"
-        >
-          <Quote size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().setHorizontalRule().run()}
-          className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md cursor-pointer text-sm font-medium transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-blue-500 hover:text-blue-600"
-          title="구분선"
-        >
-          <Dash size={16} />
-        </button>
-
-        
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
-     {/* AI 버튼 바 */}
-      <div className="flex gap-2">
-        <button onClick={handleAIResearch} className={`px-3 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-md text-sm font-medium cursor-pointer transition-all hover:from-purple-600 hover:to-purple-700 hover:transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none ${isAiLoading ? 'animate-pulse' : ''}`} disabled={isAiLoading}>
-          {isAiLoading ? '🔄 연구 중...' : '연구'}
-        </button>
-        <button onClick={handleAIAnalyze} className={`px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-md text-sm font-medium cursor-pointer transition-all hover:from-blue-600 hover:to-blue-700 hover:transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none ${isAiLoading ? 'animate-pulse' : ''}`} disabled={isAiLoading}>
-          {isAiLoading ? '🔄 분석 중...' : '분석'}
-        </button>
-        <button onClick={handleAIPersonaFeedback} className={`px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-md text-sm font-medium cursor-pointer transition-all hover:from-green-600 hover:to-green-700 hover:transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none ${isAiLoading ? 'animate-pulse' : ''}`} disabled={isAiLoading}>
-          {isAiLoading ? '🔄 피드백 중...' : '피드백'}
-        </button>
-        <button onClick={handleAIAnswer} className={`px-3 py-1.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-md text-sm font-medium cursor-pointer transition-all hover:from-orange-600 hover:to-orange-700 hover:transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none ${isAiLoading ? 'animate-pulse' : ''}`} disabled={isAiLoading}>
-          {isAiLoading ? '🔄 답변 중...' : '답변'}
-        </button>
-      </div>
-      </div>
+        />
       
-      {/* 에디터 컨텐츠 영역 - 툴바 아래 */}
-      <div className="flex-1 min-h-0 cursor-text relative overflow-y-auto" onClick={() => editor?.commands.focus()}>
+        {/* 에디터 영역 */}
+        <div 
+          id="editor-container" 
+          className="flex-1 mx-6 mt-4 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden flex flex-col focus-within:ring-1 focus-within:ring-opacity-30 focus-within:ring-blue-300 dark:focus-within:ring-blue-700 focus-within:border-blue-300 dark:focus-within:border-blue-500 mb-6 transition-all duration-200"
+          style={{'--tw-ring-color': 'rgba(99, 102, 241, 0.3)'} as React.CSSProperties}
+        >
+        
+          {/* 에디터 컨텐츠 영역 */}
+          <div className="flex-1 min-h-0 cursor-text relative overflow-y-auto" onClick={() => editor?.commands.focus()}>
         {!isEditorReady ? (
           <div className="flex flex-col items-center justify-center h-full p-6">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
@@ -1145,7 +1760,7 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
         ) : (
           <EditorContent 
             editor={editor} 
-            className="h-full [&_.ProseMirror]:outline-none [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:text-sm sm:[&_.ProseMirror]:text-base [&_.ProseMirror]:max-w-none [&_.ProseMirror]:border-0 [&_.ProseMirror]:focus:outline-none [&_.ProseMirror]:p-6 [&_.ProseMirror]:min-h-full [&_.ProseMirror]:overflow-y-visible [&_.ProseMirror]:pb-16" 
+            className="h-full [&_.ProseMirror]:outline-none [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:text-sm sm:[&_.ProseMirror]:text-base [&_.ProseMirror]:max-w-none [&_.ProseMirror]:border-0 [&_.ProseMirror]:focus:outline-none [&_.ProseMirror]:p-6 [&_.ProseMirror]:min-h-full [&_.ProseMirror]:overflow-y-visible [&_.ProseMirror]:pb-32" 
           />
         )}
         
@@ -1173,6 +1788,27 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
         )}
       </div>
       </div>
+      </div>
+
+      {/* 파일 이름 변경 모달 */}
+      <RenameModal
+        isOpen={isRenameModalOpen}
+        title="파일 이름 변경"
+        label="새 파일 이름"
+        placeholder="파일 이름을 입력하세요"
+        value={newTitle}
+        onChange={setNewTitle}
+        onConfirm={handleRenameConfirm}
+        onCancel={handleRenameCancel}
+      />
+
+      {/* 탭 닫기 확인 모달 */}
+      <TabCloseConfirmModal
+        isOpen={isTabCloseConfirmModalOpen}
+        onDelete={() => handleTabCloseConfirm('delete')}
+        onSave={() => handleTabCloseConfirm('save')}
+        onCancel={() => handleTabCloseConfirm('cancel')}
+      />
 
       {isAiLoading && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-6 mb-4 backdrop-blur-sm">
@@ -1299,10 +1935,31 @@ const Editor = forwardRef<{ handleSave: () => void }, EditorProps>(({ onSave, on
         onClearSelection={clearSelection}
       />
       
-      {/* AI 요청 버튼 - 화면 우측 하단 고정 */}
+      {/* 플로팅 툴바 - 하단 중앙 고정 (Figma 스타일) - 메뉴 기반 */}
+      <FloatingToolbar
+        editor={editor}
+        isVisible={isToolbarVisible}
+        isHiddenByWidth={isToolbarHiddenByWidth}
+        activeMenu={activeToolbarMenu}
+        toolbarOffset={toolbarOffset}
+        isAiLoading={isAiLoading}
+        onMenuChange={setActiveToolbarMenu}
+        onToggleVisibility={setIsToolbarVisible}
+        onLinkInsert={handleLinkInsert}
+        onImageInsert={() => {
+          setImageUrl('');
+          setShowImageUrlModal(true);
+        }}
+        onAIResearch={handleAIResearch}
+        onAIAnalyze={handleAIAnalyze}
+        onAIPersonaFeedback={handleAIPersonaFeedback}
+        onAIAnswer={handleAIAnswer}
+      />
+      
+      {/* AI 요청 버튼 - 화면 우측 하단 고정 (플로팅 툴바와 같은 높이) */}
       <button
         onClick={openAIPopup}
-        className="fixed bottom-12 right-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full p-4 shadow-lg transition-all hover:scale-110 hover:shadow-xl z-50"
+        className="fixed bottom-10 right-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full p-4 shadow-lg transition-all hover:scale-110 hover:shadow-xl z-50"
         title="AI 어시스턴트"
       >
         <Robot size={24} />
