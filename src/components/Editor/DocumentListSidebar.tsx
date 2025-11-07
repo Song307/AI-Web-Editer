@@ -29,17 +29,13 @@ const DocumentListSidebar = forwardRef<DocumentListSidebarRef, DocumentListSideb
 
   // 문서 목록 불러오기 함수
   const loadDocuments = useCallback(async () => {
-    try {
-      console.log('문서 목록 불러오기 시작');
+      try {
       setIsLoading(true);
       setError(null);
       
       try {
-        // 데이터베이스 초기화 확인
-        console.log('데이터베이스에서 문서 가져오기 전');
         const docs = await getAllDocuments();
-        console.log('가져온 문서 목록:', docs);
-        
+
         if (!Array.isArray(docs)) {
           throw new Error('문서 목록이 배열이 아닙니다.');
         }
@@ -52,7 +48,6 @@ const DocumentListSidebar = forwardRef<DocumentListSidebarRef, DocumentListSideb
           return dateB.getTime() - dateA.getTime();
         });
         
-        console.log('정렬된 문서 목록:', sortedDocs);
         setDocuments(sortedDocs);
       } catch (dbError: unknown) {
         console.error('데이터베이스 오류:', dbError);
@@ -75,14 +70,13 @@ const DocumentListSidebar = forwardRef<DocumentListSidebarRef, DocumentListSideb
   // 문서 목록 불러오기
   useEffect(() => {
     if (isOpen) {
-      console.log('문서 목록 사이드바 열림, 문서 로드 시작');
       loadDocuments().catch(err => {
         console.error('문서 로드 중 처리되지 않은 오류:', err);
         setError(`문서를 불러오는 중 심각한 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
         setIsLoading(false);
       });
     } else {
-      console.log('문서 목록 사이드바 닫힘');
+      // 사이드바가 닫힌 경우 추가 동작 없음
     }
   }, [isOpen, loadDocuments]);
 

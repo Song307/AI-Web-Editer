@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { House, Plus, X, FileText, Image as ImageIcon, FileEarmarkPdf } from 'react-bootstrap-icons';
 import Editor from './Editor';
+import TabHeader from './Editor/TabHeader';
 import ImageViewer from './tools/ImageViewer';
 import PDFViewer from './tools/PDFViewer';
 import { getDocument } from '../utils/db';
@@ -11,7 +12,7 @@ interface Tab {
   id: string;
   title: string;
   type: 'document' | 'image' | 'pdf' | 'video';
-  documentId?: number;
+  documentId?: string;
   content?: any;
 }
 
@@ -28,46 +29,152 @@ const Workspace: React.FC<WorkspaceProps> = ({
   onSelectionRangeChange,
   onOpenTaskbar,
 }) => {
-  const [tabs, setTabs] = useState<Tab[]>([]);
+  // taskList: canonical list of workspace tasks (persisted to cookie)
+  const [taskList, setTaskList] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [showNewFileModal, setShowNewFileModal] = useState(false);
+  // Keep a ref to the latest taskList so unmount cleanup can log the current value
+  type TaskListRefType = Tab[];
+  const taskListRef = React.useRef<TaskListRefType | null>(null as any);
+  React.useEffect(() => {
+    taskListRef.current = taskList;
+  }, [taskList]);
+  // Guard set for documentIds currently being loaded to avoid duplicate load flows
+  const loadingIdsRef = useRef<Set<string>>(new Set());
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+
+  // Quick mount log to help debug blank screen when DevTools console is empty
+  // Log on initial mount so we always get a trace when Workspace mounts
+  useEffect(() => {
+    const debugFlag = new URLSearchParams(window.location.search).get('debug');
+    try {
+      console.groupCollapsed(`[Workspace] mounted — pathname=${window.location.pathname} debug=${debugFlag}`);
+      console.log('taskList (snapshot):', taskList);
+      console.log('activeTabId (snapshot):', activeTabId);
+      console.log('url id param:', id);
+      console.groupEnd();
+    } catch (err) {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When Workspace unmounts (for example navigating to /dashboard), log the latest taskList
+  useEffect(() => {
+    return () => {
+      try {
+        console.groupCollapsed(`[Workspace] unmounting — logging final taskList (likely navigation away)`);
+        console.log('final taskList (snapshot):', taskListRef.current || []);
+        console.log('current pathname at unmount:', window.location.pathname);
+        console.groupEnd();
+      } catch (err) {}
+    };
+    // run once on mount to register cleanup on unmount
+  }, []);
+
+  // Also log whenever the route id param changes (entering a specific document)
+  useEffect(() => {
+    try {
+      console.groupCollapsed(`[Workspace] route id changed -> id=${id} pathname=${window.location.pathname}`);
+      console.log('taskList length:', taskList.length);
+      console.log('taskList ids:', taskList.map(t => t.id));
+      console.groupEnd();
+    } catch (err) {}
+    // only run when `id` changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     // URL에서 문서 ID를 받아서 탭 열기
     if (id && id !== 'new') {
-      loadDocument(parseInt(id));
+      loadDocument(id);
     } else if (id === 'new') {
       // 새 파일 생성 모달 표시
       setShowNewFileModal(true);
     }
   }, [id]);
 
-  const loadDocument = async (docId: number) => {
+  // If route id changes (or taskList changes), ensure the tab with the matching documentId becomes active
+  useEffect(() => {
+    if (!id || id === 'new') return;
     try {
-      const doc = await getDocument(docId.toString());
+      const matched = taskList.find(t => String(t.documentId) === String(id));
+      if (matched) {
+        // Activate the matched tab instead of defaulting to the first tab
+        if (activeTabId !== matched.id) {
+          setActiveTabId(matched.id);
+        }
+
+        // If the matched tab has no content (restored from cookie), load it
+        if (!matched.content) {
+          loadDocument(String(id));
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, taskList]);
+
+  const loadDocument = async (docId: string) => {
+    // avoid duplicate concurrent loads for same id
+    if (loadingIdsRef.current.has(docId)) {
+      console.log(`[Workspace] loadDocument skipped (already loading) -> docId=${docId}`);
+      return;
+    }
+
+    loadingIdsRef.current.add(docId);
+
+    try {
+      console.groupCollapsed(`[Workspace] loadDocument called -> docId=${docId}`);
+      const doc = await getDocument(docId);
+      console.log('getDocument result:', doc);
+
       if (doc) {
-        // 이미 열려있는 탭인지 확인
-        const existingTab = tabs.find(tab => tab.documentId === docId);
-        if (existingTab) {
-          setActiveTabId(existingTab.id);
-        } else {
-          // 새 탭 추가
-          const newTab: Tab = {
-            id: `doc-${docId}-${Date.now()}`,
+        // Use functional update to avoid race/stale state that caused duplicate tabs
+        let existingId: string | null = null;
+        let createdId: string | null = null;
+
+        setTaskList(prev => {
+          const existing = prev.find(task => String(task.documentId) === String(docId));
+          if (existing) {
+            existingId = existing.id;
+            // update the existing task's content/title so the Editor receives the content
+            return prev.map(t => t.id === existing.id ? { ...t, content: doc, title: doc.title || t.title } : t);
+          }
+
+          // create new task only if not present
+          createdId = `doc-${docId}-${Date.now()}`;
+          const newTask: Tab = {
+            id: createdId,
             title: doc.title,
             type: 'document',
             documentId: docId,
             content: doc
           };
-          setTabs(prev => [...prev, newTab]);
-          setActiveTabId(newTab.id);
+          const next = [...prev, newTask];
+          console.log('taskList after push (preview):', next.map(t => ({ id: t.id, documentId: t.documentId, title: t.title })));
+          return next;
+        });
+
+        if (existingId) {
+          setActiveTabId(existingId);
+          console.log('Activated existing tab:', existingId);
+        } else if (createdId) {
+          setActiveTabId(createdId);
+          console.log('Created and activated new tab:', createdId);
         }
+      } else {
+        console.warn(`[Workspace] getDocument returned null for id=${docId}`);
       }
+      console.groupEnd();
     } catch (error) {
       console.error('Failed to load document:', error);
       toast.error('문서를 불러올 수 없습니다.');
+    } finally {
+      loadingIdsRef.current.delete(docId);
     }
   };
 
@@ -80,22 +187,61 @@ const Workspace: React.FC<WorkspaceProps> = ({
   };
 
   const handleCloseTab = (tabId: string) => {
-    const tabIndex = tabs.findIndex(tab => tab.id === tabId);
-    const newTabs = tabs.filter(tab => tab.id !== tabId);
-    setTabs(newTabs);
+    const tabIndex = taskList.findIndex(tab => tab.id === tabId);
+    const newTasks = taskList.filter(tab => tab.id !== tabId);
+    setTaskList(newTasks);
 
     // 닫은 탭이 활성 탭이었다면 다른 탭 활성화
-    if (activeTabId === tabId && newTabs.length > 0) {
+    if (activeTabId === tabId && newTasks.length > 0) {
       if (tabIndex > 0) {
-        setActiveTabId(newTabs[tabIndex - 1].id);
+        setActiveTabId(newTasks[tabIndex - 1].id);
       } else {
-        setActiveTabId(newTabs[0].id);
+        setActiveTabId(newTasks[0].id);
       }
-    } else if (newTabs.length === 0) {
+    } else if (newTasks.length === 0) {
       setActiveTabId(null);
       // 탭이 없으면 대시보드로 이동
       navigate('/dashboard');
     }
+  };
+
+  // Drag-reorder handlers for TabHeader
+  const handleDragStart = (id: string) => {
+    setDraggedTaskId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    if (!draggedTaskId || draggedTaskId === id) return;
+    setTaskList(prev => {
+      const draggedItem = prev.find(t => t.id === draggedTaskId);
+      if (!draggedItem) return prev;
+      const without = prev.filter(t => t.id !== draggedTaskId);
+      const idx = without.findIndex(t => t.id === id);
+      if (idx === -1) return prev;
+      return [...without.slice(0, idx), draggedItem, ...without.slice(idx)];
+    });
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTaskId(null);
+  };
+
+  // When a tab is clicked, navigate to the corresponding document page (or workspace route for unsaved/new tabs)
+  const handleTabClick = (tabId: string) => {
+    const tab = taskList.find(t => t.id === tabId);
+    if (!tab) return;
+    // Activate the tab in the SSoT
+    setActiveTabId(tabId);
+
+    // If this tab is backed by a persisted document, navigate to /documents/:id
+    if (tab.documentId) {
+      navigate(`/documents/${tab.documentId}`);
+      return;
+    }
+
+    // Otherwise, navigate to workspace route for this tab (keeps URL in sync)
+    navigate(`/workspace/${tabId}`);
   };
 
   const handleCreateFile = (fileType: 'document' | 'image' | 'pdf') => {
@@ -104,7 +250,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
       title: `새 ${fileType === 'document' ? '문서' : fileType === 'image' ? '이미지' : 'PDF'}`,
       type: fileType
     };
-    setTabs(prev => [...prev, newTab]);
+    setTaskList(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
     setShowNewFileModal(false);
   };
@@ -122,61 +268,119 @@ const Workspace: React.FC<WorkspaceProps> = ({
     }
   };
 
-  const activeTab = tabs.find(tab => tab.id === activeTabId);
+  const activeTab = taskList.find(tab => tab.id === activeTabId);
+
+  // 렌더 시 로그는 제거하여 콘솔 노이즈를 줄임
+
+  // Map workspace tabs to the shape Editor expects (DocumentTab-like)
+  // Map taskList to the shape Editor expects (DocumentTab-like)
+  const editorTabs = taskList.map(t => ({
+    id: t.id,
+    title: t.title,
+    content: typeof t.content === 'string' ? t.content : (t.content?.content ?? ''),
+    isActive: t.id === activeTabId,
+    documentId: t.documentId ? String(t.documentId) : undefined,
+  }));
+
+  // Adapter to accept Editor's setTabs updates and map them back to workspace tabs
+  // Adapter to accept Editor's setTabs updates and map them back to taskList
+  const setTabsFromEditor = (updater: React.SetStateAction<any[]>) => {
+    const current = editorTabs;
+    const updated = typeof updater === 'function' ? (updater as (prev: any[]) => any[])(current) : updater;
+
+    // Map updated editor tabs back into taskList shape
+    const mapped = updated.map((et: any) => {
+      const existing = taskList.find(t => t.id === et.id);
+      return {
+        id: et.id,
+        title: et.title || (existing ? existing.title : 'Untitled'),
+        type: existing ? existing.type : 'document',
+        documentId: et.documentId ?? existing?.documentId,
+        content: et.content,
+      } as Tab;
+    });
+
+    // Preserve tasks that weren't touched by editor updates
+    const updatedIds = new Set(mapped.map(m => m.id));
+    const preserved = taskList.filter(t => !updatedIds.has(t.id));
+    const final = [...preserved, ...mapped];
+    setTaskList(final);
+  };
+
+  // taskList가 변경될 때마다 로그 남기기
+  useEffect(() => {
+    // 디버그용 콘솔 출력 제거됨
+  }, [taskList]);
+
+  // Persist tabs (current task list) to a cookie whenever tabs change
+  useEffect(() => {
+    try {
+      const minimalTasks = taskList.map(t => ({ id: t.id, title: t.title, type: t.type, documentId: t.documentId }));
+      const expirationDate = new Date();
+      expirationDate.setDate(expirationDate.getDate() + 7); // 7 days
+      document.cookie = `workspaceTasks=${encodeURIComponent(JSON.stringify(minimalTasks))}; expires=${expirationDate.toUTCString()}; path=/`;
+    } catch (err) {
+      console.error('Failed to save workspace tasks to cookie', err);
+    }
+  }, [taskList]);
+
+  // On mount, restore tabs from cookie if no explicit doc id in URL
+  // On mount, restore tabs from cookie if workspace has no tasks yet.
+  // Use useLayoutEffect so restoration happens before other effects (like route id handling)
+  useLayoutEffect(() => {
+    // Read cookie regardless of URL id — we want tasks to persist when returning to Workspace
+    const cookies = document.cookie.split('; ').reduce<Record<string,string>>((acc, cur) => {
+      const [k, v] = cur.split('=');
+      acc[k] = v;
+      return acc;
+    }, {} as Record<string,string>);
+
+    const tasksCookie = cookies['workspaceTasks'];
+    if (tasksCookie) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(tasksCookie));
+        if (Array.isArray(parsed) && parsed.length > 0 && taskList.length === 0) {
+          // Only restore id/title/type/documentId to avoid huge payloads
+          const restored: Tab[] = parsed.map((t: any) => ({
+            id: t.id,
+            title: t.title || 'Untitled',
+            type: t.type || 'document',
+            documentId: t.documentId,
+            content: undefined,
+          }));
+          setTaskList(restored);
+          // Only set active tab if we don't already have one
+          if (!activeTabId && restored.length > 0) setActiveTabId(restored[0].id);
+        }
+      } catch (err) {
+        console.error('Failed to parse workspaceTasks cookie', err);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900">
-      {/* 탭 헤더 */}
-      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-        <div className="flex items-center h-12">
-          {/* 홈 버튼 */}
-          <button
-            onClick={handleHomeClick}
-            className="px-4 h-full flex items-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border-r border-gray-200 dark:border-gray-700"
-            title="대시보드로 이동"
-          >
-            <House size={18} className="text-gray-600 dark:text-gray-400" />
-          </button>
-
-          {/* 탭 목록 */}
-          <div className="flex-1 flex items-center overflow-x-auto">
-            {tabs.map(tab => (
-              <div
-                key={tab.id}
-                className={`h-full flex items-center px-4 border-r border-gray-200 dark:border-gray-700 cursor-pointer group min-w-[120px] max-w-[200px] ${
-                  activeTabId === tab.id
-                    ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white'
-                    : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-750'
-                }`}
-                onClick={() => setActiveTabId(tab.id)}
-              >
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {getTabIcon(tab.type)}
-                  <span className="text-sm truncate">{tab.title}</span>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCloseTab(tab.id);
-                  }}
-                  className="ml-2 p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {/* 새 파일 버튼 */}
-          <button
-            onClick={handleNewFileClick}
-            className="px-4 h-full flex items-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border-l border-gray-200 dark:border-gray-700"
-            title="새 파일"
-          >
-            <Plus size={18} className="text-gray-600 dark:text-gray-400" />
-          </button>
+      {/* Debug panel when ?debug=1 is present in URL */}
+      {new URLSearchParams(window.location.search).get('debug') === '1' && (
+        <div className="p-2 bg-black text-white text-xs">
+          <strong>WORKSPACE DEBUG</strong>
+          <pre className="whitespace-pre-wrap max-h-40 overflow-auto text-left">{JSON.stringify({ taskList, activeTabId, editorTabs }, null, 2)}</pre>
         </div>
-      </div>
+      )}
+
+      {/* 탭 헤더 (Workspace 상단에 렌더) */}
+      <TabHeader
+        tabs={editorTabs as any}
+        activeTabId={activeTabId || ''}
+        onTabClick={(id: string) => handleTabClick(id)}
+        onCloseTab={(id: string, e: React.MouseEvent) => { e.stopPropagation(); handleCloseTab(id); }}
+        onAddTab={handleNewFileClick}
+        onDragStart={(id: string) => handleDragStart(id)}
+        onDragOver={(e: React.DragEvent, id: string) => handleDragOver(e, id)}
+        onDragEnd={() => handleDragEnd()}
+        onHomeClick={handleHomeClick}
+      />
 
       {/* 탭 컨텐츠 */}
       <div className="flex-1 overflow-hidden">
@@ -188,6 +392,14 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 onSelectionPreviewChange={onSelectionPreviewChange}
                 onSelectionRangeChange={onSelectionRangeChange}
                 onOpenTaskbar={onOpenTaskbar}
+                onOpenDocument={(docId: string) => loadDocument(docId)}
+                tabs={editorTabs}
+                setTabs={setTabsFromEditor}
+                activeTabId={activeTabId || ''}
+                setActiveTabId={(id: string) => setActiveTabId(id)}
+                initialContent={typeof activeTab.content === 'string' ? activeTab.content : (activeTab.content?.content ?? '')}
+                initialContentType={typeof activeTab.content === 'object' && activeTab.content?.contentType ? activeTab.content.contentType : undefined}
+                initialTitle={activeTab.title}
               />
             )}
             {activeTab.type === 'image' && (

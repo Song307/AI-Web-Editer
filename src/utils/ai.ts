@@ -9,7 +9,7 @@ if (!API_KEY) {
   throw new Error('Gemini API key is missing');
 }
 
-console.log('API Key loaded:', API_KEY ? 'Yes' : 'No');
+// Debug log removed: API key load status
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 

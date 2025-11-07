@@ -15,6 +15,29 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
 
   useEffect(() => {
     loadDocuments();
+    // On dashboard mount, print any persisted workspace tasks from cookie so
+    // users can see the last-known taskList even if Workspace isn't mounted.
+    try {
+      const cookies = document.cookie.split('; ').reduce<Record<string,string>>((acc, cur) => {
+        const [k, v] = cur.split('=');
+        acc[k] = v;
+        return acc;
+      }, {} as Record<string,string>);
+      const tasksCookie = cookies['workspaceTasks'];
+      if (tasksCookie) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(tasksCookie));
+          // concise output as requested by user
+          console.log('[Dashboard] Tasks :', Array.isArray(parsed) ? parsed : []);
+        } catch (err) {
+          console.warn('[Dashboard] Tasks :', []);
+        }
+      } else {
+        console.log('[Dashboard] Tasks :', []);
+      }
+    } catch (err) {
+      // swallow - non-critical
+    }
   }, []);
 
   const loadDocuments = async () => {

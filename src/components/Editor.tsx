@@ -21,7 +21,6 @@ import { saveDocument, getDocument, deleteDocument, Document } from '../utils/db
 import { researchTopic, analyzeText, generatePersonaFeedback, answerQuestion, analyzeImage, analyzePDFPages } from '../utils/ai';
 import toast from 'react-hot-toast';
 import TurndownService from 'turndown';
-import TabHeader from './Editor/TabHeader';
 import HeaderMenu from './Editor/HeaderMenu';
 import LeftSidebar from './Editor/LeftSidebar';
 import FloatingToolbar from './Editor/FloatingToolbar';
@@ -109,9 +108,18 @@ interface EditorProps {
   onSelectionPreviewChange?: (preview: string | null) => void;
   onSelectionRangeChange?: (range: { from: number; to: number } | null) => void;
   onOpenTaskbar?: () => void;
+  onOpenDocument?: (docId: string) => void;
+  // optional inputs from Workspace to ensure content displays when Workspace drives tabs
+  initialContent?: string;
+  initialContentType?: 'markdown' | 'html';
+  initialTitle?: string;
+  tabs?: any[];
+  activeTabId?: string;
+  setTabs?: React.Dispatch<React.SetStateAction<any[]>>;
+  setActiveTabId?: (id: string) => void;
 }
 
-const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar }, ref) => {
+const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId }, ref) => {
   const { id } = useParams<{ id: string }>();
   const documentId = id;
   const [title, setTitle] = useState('Untitled Document');
@@ -217,6 +225,23 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       // onCreate에서 추가한 이벤트 리스너는 자동으로 정리됨
     },
   });
+
+  // If Workspace is providing tabs/activeTabId, treat them as the single source of truth.
+  const currentTabs = externalTabs ?? tabs;
+  const currentActiveTabId = externalActiveTabId ?? activeTabId;
+
+  const updateTabs = (updater: React.SetStateAction<any[]>) => {
+    if (externalSetTabs) {
+      externalSetTabs(updater as any);
+    } else {
+      setTabs(prev => typeof updater === 'function' ? (updater as (prev: any[]) => any[])(prev) : updater as any[]);
+    }
+  };
+
+  const updateActiveTabId = (id: string) => {
+    if (externalSetActiveTabId) externalSetActiveTabId(id);
+    else setActiveTabId(id);
+  };
 
   const showSlashMenuRef = useRef(showSlashMenu);
 
@@ -476,12 +501,12 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     if (!editor) return;
 
     const editorState = {
-      tabs: tabs.map(tab => ({
+      tabs: (currentTabs || []).map((tab: any) => ({
         ...tab,
         // 현재 활성 탭이면 최신 에디터 내용으로 업데이트
-        content: tab.id === activeTabId ? editor.getHTML() : tab.content
+        content: tab.id === currentActiveTabId ? editor.getHTML() : tab.content
       })),
-      activeTabId,
+      activeTabId: currentActiveTabId,
     };
 
     // 쿠키에 저장 (7일 유효)
@@ -501,8 +526,8 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         const editorState = JSON.parse(editorStateStr);
         
         if (editorState.tabs && editorState.tabs.length > 0) {
-          setTabs(editorState.tabs);
-          setActiveTabId(editorState.activeTabId || editorState.tabs[0].id);
+          updateTabs(editorState.tabs);
+          updateActiveTabId(editorState.activeTabId || editorState.tabs[0].id);
           
           // 활성 탭의 내용을 에디터에 로드
           const activeTab = editorState.tabs.find((tab: DocumentTab) => tab.id === editorState.activeTabId);
@@ -555,6 +580,21 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   // 에디터가 준비된 후 문서 로딩
   useEffect(() => {
     if (isEditorReady && editor) {
+      // If Workspace passed an initialContent (active tab content), prefer that immediately
+      if (initialContent != null) {
+        if (initialContentType === 'markdown') {
+          try {
+            editor.commands.setContent(marked(initialContent) as string);
+          } catch (err) {
+            console.error('초기 마크다운 변환 실패:', err);
+            editor.commands.setContent(initialContent);
+          }
+        } else {
+          editor.commands.setContent(initialContent);
+        }
+        if (initialTitle) setTitle(initialTitle);
+        return;
+      }
       if (documentId) {
         getDocument(documentId).then((doc) => {
           if (doc) {
@@ -1018,14 +1058,14 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     if (!editor) return;
 
     // 현재 활성 탭의 내용 저장 (변경사항이 있는 경우에만)
-    const currentTab = tabs.find(t => t.id === activeTabId);
+    const currentTab = currentTabs.find((t: any) => t.id === currentActiveTabId);
     if (currentTab) {
       const currentHtml = editor.getHTML();
-      const hasChanges = currentTab.content !== currentHtml;
+      const hasChanges = (currentTab.content || '') !== currentHtml;
       
       if (hasChanges) {
         // 변경사항이 있는 경우에만 탭 내용 업데이트
-        setTabs(tabs.map(tab => 
+        updateTabs((prev: any[]) => (prev || currentTabs).map(tab => 
           tab.id === currentTab.id 
             ? { 
                 ...tab, 
@@ -1039,7 +1079,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         ));
       } else {
         // 변경사항이 없는 경우 isActive만 업데이트
-        setTabs(tabs.map(tab => ({
+        updateTabs((prev: any[]) => (prev || currentTabs).map(tab => ({
           ...tab,
           isActive: tab.id === tabId
         })));
@@ -1047,12 +1087,12 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     }
 
     // 새 탭 활성화
-    setActiveTabId(tabId);
-    const newActiveTab = tabs.find(t => t.id === tabId);
+    updateActiveTabId(tabId);
+    const newActiveTab = (currentTabs || []).find((t: any) => t.id === tabId);
     
     if (newActiveTab) {
       // 탭 내용 로드
-      if (newActiveTab.contentType === 'markdown') {
+  if (newActiveTab.contentType === 'markdown') {
         // Markdown인 경우 HTML로 변환하여 표시
         try {
           const htmlContent = markdownToHtml(newActiveTab.content);
@@ -1067,7 +1107,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       }
       
       // 타이틀 업데이트
-      setTitle(newActiveTab.title);
+  setTitle(newActiveTab.title);
       
       // 스크롤 맨 위로 이동
       window.scrollTo(0, 0);
@@ -1076,13 +1116,12 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
 
   const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-
-    if (tabs.length === 1) {
+    if ((currentTabs || []).length === 1) {
       toast.error('마지막 탭은 닫을 수 없습니다.');
       return;
     }
 
-    const tab = tabs.find(t => t.id === tabId);
+    const tab = (currentTabs || []).find((t: any) => t.id === tabId);
     if (tab) {
       // 현재 에디터의 내용 가져오기
       const currentContent = editor?.getHTML() || '';
@@ -1103,21 +1142,25 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   };
 
   const performCloseTab = (tabId: string) => {
-    const tabIndex = tabs.findIndex(t => t.id === tabId);
-    const newTabs = tabs.filter(t => t.id !== tabId);
+    const tabIndex = (currentTabs || []).findIndex((t: any) => t.id === tabId);
+    const newTabs = (currentTabs || []).filter((t: any) => t.id !== tabId);
 
     // 닫힌 탭이 활성 탭이었다면 인접한 탭 활성화
-    if (tabId === activeTabId) {
+    if (tabId === currentActiveTabId) {
       const newActiveIndex = tabIndex > 0 ? tabIndex - 1 : 0;
       const newActiveTab = newTabs[newActiveIndex];
-      setActiveTabId(newActiveTab.id);
-      if (editor) {
-        editor.commands.setContent(newActiveTab.content);
-        setTitle(newActiveTab.title);
+      if (newActiveTab) {
+        updateActiveTabId(newActiveTab.id);
+        if (editor) {
+          editor.commands.setContent(newActiveTab.content || '');
+          setTitle(newActiveTab.title);
+        }
+      } else {
+        updateActiveTabId('');
       }
     }
 
-    setTabs(newTabs);
+    updateTabs(newTabs);
   };
 
   const handleTabCloseConfirm = (action: 'delete' | 'save' | 'cancel') => {
@@ -1152,14 +1195,11 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     // 현재 활성 탭의 내용 저장
     if (editor) {
       const htmlContent = editor.getHTML();
-      setTabs([
-        ...tabs.map(tab => ({ ...tab, content: tab.id === activeTabId ? htmlContent : tab.content, isActive: false })),
-        newTab
-      ]);
+      updateTabs((prev: any[]) => (prev || currentTabs).map(tab => ({ ...tab, content: tab.id === currentActiveTabId ? htmlContent : tab.content, isActive: false })).concat(newTab));
     }
 
     // 새 탭 활성화
-    setActiveTabId(newTabId);
+    updateActiveTabId(newTabId);
     setTitle('Untitled Document');
     if (editor) {
       editor.commands.setContent('');
@@ -1286,14 +1326,14 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       setTitle(newTitle);
       
       // 탭 제목도 업데이트
-      const updatedTabs = tabs.map(tab => 
-        tab.id === activeTabId ? { ...tab, title: newTitle } : tab
+      const updatedTabs = (currentTabs || []).map((tab: any) => 
+        tab.id === currentActiveTabId ? { ...tab, title: newTitle } : tab
       );
-      setTabs(updatedTabs);
+      updateTabs(updatedTabs);
       
       // 문서 저장
       try {
-        const currentTab = updatedTabs.find(tab => tab.id === activeTabId);
+  const currentTab = updatedTabs.find((tab: any) => tab.id === currentActiveTabId);
         if (currentTab) {
           const markdownContent = editor ? htmlToMarkdown(editor.getHTML()) : '';
           const now = new Date();
@@ -1348,30 +1388,29 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       prevTabs.map(tab => ({ ...tab, isActive: false }))
         .concat(newTab)
     );
-    setActiveTabId(newTab.id);
+    updateTabs((prev: any[]) => (prev || currentTabs).map((tab: any) => ({ ...tab, isActive: false })).concat(newTab));
+    updateActiveTabId(newTab.id);
     toast.success('파일이 복사되었습니다.');
   };
 
   // 파일 삭제하기 핸들러
   const handleDeleteFile = () => {
-    if (tabs.length <= 1) {
+    if ((currentTabs || []).length <= 1) {
       toast.error('마지막 탭은 삭제할 수 없습니다.');
       return;
     }
-
-    const currentIndex = tabs.findIndex(tab => tab.id === activeTabId);
-    const newTabs = tabs.filter(tab => tab.id !== activeTabId);
+    const currentIndex = (currentTabs || []).findIndex((tab: any) => tab.id === currentActiveTabId);
+    const newTabs = (currentTabs || []).filter((tab: any) => tab.id !== currentActiveTabId);
     
     // 삭제 후 활성화할 탭 결정 (이전 탭 또는 다음 탭)
     let newActiveTabId = '';
     if (currentIndex > 0) {
-      newActiveTabId = tabs[currentIndex - 1].id;
+      newActiveTabId = (currentTabs || [])[currentIndex - 1].id;
     } else if (tabs.length > 1) {
-      newActiveTabId = tabs[1].id;
+      newActiveTabId = (currentTabs || [])[1].id;
     }
-
-    setTabs(newTabs);
-    setActiveTabId(newActiveTabId);
+    updateTabs(newTabs);
+    updateActiveTabId(newActiveTabId);
     toast.success('파일이 삭제되었습니다.');
   };
 
@@ -1380,7 +1419,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
 
     try {
       // Get the current tab to check content type
-      const currentTab = tabs.find(tab => tab.id === activeTabId);
+      const currentTab = (currentTabs || []).find((tab: any) => tab.id === currentActiveTabId);
       if (!currentTab) {
         toast.error('저장할 탭을 찾을 수 없습니다.');
         return;
@@ -1415,8 +1454,8 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       await saveDocument(doc);
       
       // Update the tab with saved content and document ID
-      const updatedTabs = tabs.map(tab => 
-        tab.id === activeTabId 
+      const updatedTabs = (currentTabs || []).map((tab: any) => 
+        tab.id === currentActiveTabId 
           ? { 
               ...tab, 
               content: contentToSave, 
@@ -1427,7 +1466,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
           : tab
       );
       
-      setTabs(updatedTabs);
+      updateTabs(updatedTabs);
       
       // Call callbacks
       onSave?.(doc);
@@ -1678,17 +1717,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
 
   return (
     <div className="h-full flex flex-col relative overflow-hidden">
-      {/* 탭 헤더 */}
-      <TabHeader
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onTabClick={handleTabClick}
-        onCloseTab={(id, e) => handleCloseTab(id, e)}
-        onAddTab={handleAddTab}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      />
+      {/* Tab header is rendered at Workspace level now (moved out of Editor) */}
       
       {/* 헤더 메뉴 */}
       <HeaderMenu
@@ -1728,19 +1757,26 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
           isOpen={isDocumentListOpen}
           onClose={() => setIsDocumentListOpen(false)}
           onDocumentSelect={async (doc) => {
+            // If parent provided a direct handler to open documents (Workspace), delegate to it so Workspace remains SSoT.
+            if (onOpenDocument) {
+              try {
+                onOpenDocument(String(doc.id));
+              } catch (e) {
+                console.error('onOpenDocument handler failed:', e);
+              }
+              return;
+            }
             try {
               // Check if the document is already open in a tab
-              const existingTab = tabs.find(tab => tab.documentId === doc.id);
+              const existingTab = (currentTabs || []).find((tab: any) => String(tab.documentId) === String(doc.id));
               
               if (existingTab) {
                 // If the document is already open, switch to that tab
-                setTabs(prevTabs => 
-                  prevTabs.map(tab => ({
-                    ...tab,
-                    isActive: tab.id === existingTab.id
-                  }))
-                );
-                setActiveTabId(existingTab.id);
+                updateTabs((prev: any[]) => (prev || currentTabs).map((tab: any) => ({
+                  ...tab,
+                  isActive: tab.id === existingTab.id
+                })));
+                updateActiveTabId(existingTab.id);
                 setTitle(doc.title || 'Untitled Document');
                 
                 // Load the document content
@@ -1767,12 +1803,9 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
                   };
                   
                   // Add the new tab and make it active
-                  setTabs(prevTabs => [
-                    ...prevTabs.map(tab => ({ ...tab, isActive: false })),
-                    newTab
-                  ]);
+                  updateTabs((prev: any[]) => (prev || currentTabs).map(tab => ({ ...tab, isActive: false })).concat(newTab));
                   
-                  setActiveTabId(newTabId);
+                  updateActiveTabId(newTabId);
                   setTitle(loadedDoc.title || 'Untitled Document');
                   
                   // Set the editor content
@@ -1799,27 +1832,27 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
               await deleteDocument(docId);
               
               // If the deleted document is currently open, close its tab
-              if (tabs.some(tab => tab.documentId === docId)) {
-                const tabToRemove = tabs.find(tab => tab.documentId === docId);
+              if ((currentTabs || []).some((tab: any) => String(tab.documentId) === String(docId))) {
+                const tabToRemove = (currentTabs || []).find((tab: any) => String(tab.documentId) === String(docId));
                 if (tabToRemove) {
                   // If it's the active tab, switch to another tab
-                  if (activeTabId === tabToRemove.id) {
-                    const currentIndex = tabs.findIndex(tab => tab.id === tabToRemove.id);
+                  if (currentActiveTabId === tabToRemove.id) {
+                    const currentIndex = (currentTabs || []).findIndex((tab: any) => tab.id === tabToRemove.id);
                     let newActiveTabId = '';
                     
-                    if (tabs.length > 1) {
+                    if ((currentTabs || []).length > 1) {
                       if (currentIndex > 0) {
-                        newActiveTabId = tabs[currentIndex - 1].id;
-                      } else if (tabs.length > 1) {
-                        newActiveTabId = tabs[1].id;
+                        newActiveTabId = (currentTabs || [])[currentIndex - 1].id;
+                      } else if ((currentTabs || []).length > 1) {
+                        newActiveTabId = (currentTabs || [])[1].id;
                       }
                     }
                     
-                    setActiveTabId(newActiveTabId);
+                    updateActiveTabId(newActiveTabId);
                   }
                   
                   // Remove the tab
-                  setTabs(prevTabs => prevTabs.filter(tab => tab.id !== tabToRemove.id));
+                  updateTabs((prev: any[]) => (prev || currentTabs).filter((tab: any) => tab.id !== tabToRemove.id));
                 }
               }
               

@@ -90,11 +90,10 @@ let db: IDBDatabase | null = null;
 
 export const deleteAndReinitDB = (): Promise<void> => {
   return new Promise((resolve, reject) => {
-    console.log('IndexedDB 삭제 및 재초기화 시작');
+  // IndexedDB 삭제 및 재초기화 시작 (로그 제거)
     
     // 기존 연결 닫기
-    if (db) {
-      console.log('기존 DB 연결 닫기');
+      if (db) {
       db.close();
       db = null;
     }
@@ -112,8 +111,7 @@ export const deleteAndReinitDB = (): Promise<void> => {
     };
 
     deleteRequest.onsuccess = () => {
-      console.log('데이터베이스 삭제 성공, 재초기화 진행');
-      // 약간의 지연을 두고 재초기화
+      // 데이터베이스 삭제 성공, 재초기화 진행 (로그 제거)
       setTimeout(() => {
         initDB().then(resolve).catch(reject);
       }, 100);
@@ -122,11 +120,11 @@ export const deleteAndReinitDB = (): Promise<void> => {
 };
 
 export const forceInitDB = async (): Promise<void> => {
-  console.log('강제 데이터베이스 초기화 시작');
+  // 강제 데이터베이스 초기화 시작 (로그 제거)
   try {
     // 데이터베이스 삭제 후 재생성
     await deleteAndReinitDB();
-    console.log('강제 데이터베이스 초기화 완료');
+  // 강제 데이터베이스 초기화 완료 (로그 제거)
   } catch (error) {
     console.error('강제 데이터베이스 초기화 실패:', error);
     throw error;
@@ -135,11 +133,10 @@ export const forceInitDB = async (): Promise<void> => {
 
 export const initDB = (): Promise<void> => {
   return new Promise((resolve, reject) => {
-    console.log('IndexedDB 초기화 시작, 버전:', DB_VERSION);
+  // IndexedDB 초기화 시작 (로그 제거)
 
     // 이미 초기화된 데이터베이스가 있으면 닫기
     if (db) {
-      console.log('기존 데이터베이스 연결 닫기');
       db.close();
       db = null;
     }
@@ -159,8 +156,7 @@ export const initDB = (): Promise<void> => {
 
     request.onsuccess = (event) => {
       db = request.result;
-      console.log('IndexedDB 초기화 성공, 사용 가능한 오브젝트 스토어:', Array.from(db.objectStoreNames));
-      console.log('데이터베이스 버전:', db.version);
+  // IndexedDB 초기화 성공 (로그 제거)
 
       // 필수 객체 스토어가 모두 있는지 확인
       const requiredStores = [DOCUMENTS_STORE, IMAGES_STORE, PDFS_STORE, VIDEOS_STORE, AI_SECRETARIES_STORE];
@@ -168,7 +164,6 @@ export const initDB = (): Promise<void> => {
       
       if (missingStores.length > 0) {
         console.error('누락된 객체 스토어:', missingStores);
-        console.log('데이터베이스 재생성 필요');
         db!.close();
         db = null;
         // 버전을 올려서 다시 시도
@@ -182,7 +177,7 @@ export const initDB = (): Promise<void> => {
 
       // 데이터베이스 연결이 끊어졌을 때 재연결
       db.onversionchange = () => {
-        console.log('데이터베이스 버전 변경 감지, 연결 종료');
+        // 데이터베이스 버전 변경 감지 - 연결 종료 (로그 제거)
         db?.close();
         db = null;
       };
@@ -191,7 +186,7 @@ export const initDB = (): Promise<void> => {
     };
 
     request.onupgradeneeded = (event) => {
-      console.log('데이터베이스 업그레이드 필요, 현재 버전:', event.oldVersion, '새 버전:', event.newVersion);
+  // 데이터베이스 업그레이드 필요 (로그 제거)
       const upgradeDb = (event.target as IDBOpenDBRequest).result;
 
       // 문서 저장소 (기존)
@@ -199,7 +194,7 @@ export const initDB = (): Promise<void> => {
         const store = upgradeDb.createObjectStore(DOCUMENTS_STORE, { keyPath: 'id' });
         store.createIndex('title', 'title', { unique: false });
         store.createIndex('createdAt', 'createdAt', { unique: false });
-        console.log('문서 저장소 생성됨');
+  // 문서 저장소 생성됨 (로그 제거)
       }
 
       // 이미지 저장소 (기존)
@@ -207,7 +202,7 @@ export const initDB = (): Promise<void> => {
         const imageStore = upgradeDb.createObjectStore(IMAGES_STORE, { keyPath: 'id' });
         imageStore.createIndex('name', 'name', { unique: false });
         imageStore.createIndex('createdAt', 'createdAt', { unique: false });
-        console.log('이미지 저장소 생성됨');
+  // 이미지 저장소 생성됨 (로그 제거)
       }
 
       // PDF 저장소 (신규)
@@ -215,7 +210,7 @@ export const initDB = (): Promise<void> => {
         const pdfStore = upgradeDb.createObjectStore(PDFS_STORE, { keyPath: 'id' });
         pdfStore.createIndex('name', 'name', { unique: false });
         pdfStore.createIndex('createdAt', 'createdAt', { unique: false });
-        console.log('PDF 저장소 생성됨');
+  // PDF 저장소 생성됨 (로그 제거)
       }
 
       // 동영상 저장소 (신규)
@@ -223,7 +218,7 @@ export const initDB = (): Promise<void> => {
         const videoStore = upgradeDb.createObjectStore(VIDEOS_STORE, { keyPath: 'id' });
         videoStore.createIndex('name', 'name', { unique: false });
         videoStore.createIndex('createdAt', 'createdAt', { unique: false });
-        console.log('동영상 저장소 생성됨');
+  // 동영상 저장소 생성됨 (로그 제거)
       }
 
       // AI 비서 저장소 (신규)
@@ -231,10 +226,10 @@ export const initDB = (): Promise<void> => {
         const aiSecretaryStore = upgradeDb.createObjectStore(AI_SECRETARIES_STORE, { keyPath: 'id' });
         aiSecretaryStore.createIndex('name', 'name', { unique: false });
         aiSecretaryStore.createIndex('createdAt', 'createdAt', { unique: false });
-        console.log('AI 비서 저장소 생성됨');
+  // AI 비서 저장소 생성됨 (로그 제거)
       }
 
-      console.log('데이터베이스 업그레이드 완료, 최종 저장소 목록:', Array.from(upgradeDb.objectStoreNames));
+  // 데이터베이스 업그레이드 완료 (로그 제거)
     };
   });
 };
@@ -264,37 +259,26 @@ export const getDocument = async (id: string): Promise<Document | null> => {
 };
 
 export const getAllDocuments = async (): Promise<Document[]> => {
-  console.log('getAllDocuments called');
-  
   try {
     if (!db) {
-      console.log('Database not initialized, initializing...');
       await initDB();
       if (!db) {
         throw new Error('Database initialization failed');
       }
     }
-    
-    console.log('Database connection established, creating transaction...');
-    
+
     return new Promise((resolve, reject) => {
       try {
         const transaction = db!.transaction([DOCUMENTS_STORE], 'readonly');
-        console.log('Transaction created, getting object store...');
-        
         const store = transaction.objectStore(DOCUMENTS_STORE);
-        console.log('Object store retrieved, creating request...');
-        
         const request = store.getAll();
-        console.log('Request created, setting up handlers...');
-        
+
         request.onerror = () => {
           console.error('Error in getAll request:', request.error);
           reject(request.error || new Error('Unknown error in getAll request'));
         };
-        
+
         request.onsuccess = () => {
-          console.log('getAll request successful, result:', request.result);
           if (!Array.isArray(request.result)) {
             console.error('Unexpected result format:', request.result);
             reject(new Error('Expected an array of documents'));
@@ -302,16 +286,16 @@ export const getAllDocuments = async (): Promise<Document[]> => {
           }
           resolve(request.result);
         };
-        
+
         transaction.oncomplete = () => {
-          console.log('Transaction completed');
+          // transaction completed
         };
-        
+
         transaction.onerror = (event) => {
           console.error('Transaction error:', event);
           reject(transaction.error || new Error('Unknown transaction error'));
         };
-        
+
       } catch (error) {
         console.error('Error in getAllDocuments promise:', error);
         reject(error);

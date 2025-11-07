@@ -11,6 +11,7 @@ interface TabHeaderProps {
   onDragStart: (id: string) => void;
   onDragOver: (e: React.DragEvent, id: string) => void;
   onDragEnd: () => void;
+  onHomeClick?: () => void;
 }
 
 const TabHeader: React.FC<TabHeaderProps> = ({
@@ -22,6 +23,7 @@ const TabHeader: React.FC<TabHeaderProps> = ({
   onDragStart,
   onDragOver,
   onDragEnd,
+  onHomeClick,
 }) => {
   return (
     <div className="flex-shrink-0 border-b-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
@@ -30,6 +32,7 @@ const TabHeader: React.FC<TabHeaderProps> = ({
         <button
           className="flex items-center justify-center p-2 mr-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all"
           title="홈"
+          onClick={() => onHomeClick && onHomeClick()}
         >
           <House size={20} />
         </button>

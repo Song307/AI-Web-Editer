@@ -98,12 +98,10 @@ function AppContent() {
     const initializeDB = async () => {
       try {
         await initDB();
-        console.log('App: DB 초기화 성공');
       } catch (error) {
         console.error('App: DB 초기화 실패:', error);
         // 재시도
         try {
-          console.log('App: DB 재초기화 시도');
           await initDB();
         } catch (retryError) {
           console.error('App: DB 재초기화도 실패:', retryError);
@@ -232,8 +230,10 @@ function AppContent() {
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard isDarkMode={isDarkMode} />} />
-              <Route path="/workspace" element={<Workspace isDarkMode={isDarkMode} onSelectionPreviewChange={setSelectionPreview} onSelectionRangeChange={setSelectionRange} onOpenTaskbar={() => setIsRightSidebarOpen(true)} />} />
-              <Route path="/workspace/:id" element={<Workspace isDarkMode={isDarkMode} onSelectionPreviewChange={setSelectionPreview} onSelectionRangeChange={setSelectionRange} onOpenTaskbar={() => setIsRightSidebarOpen(true)} />} />
+              <Route path="/workspace" element={<Workspace isDarkMode={isDarkMode} />} />
+              <Route path="/workspace/:id" element={<Workspace isDarkMode={isDarkMode} />} />
+              <Route path="/documents" element={<Workspace isDarkMode={isDarkMode} />} />
+              <Route path="/documents/:id" element={<Workspace isDarkMode={isDarkMode} />} />
               <Route path="/clipboard" element={<ClipboardPage />} />
               <Route path="/storage" element={<StoragePage />} />
               <Route 
