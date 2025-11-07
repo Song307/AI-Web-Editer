@@ -329,3 +329,14 @@ code {
   border-color: transparent transparent #374151 transparent;
 }
 
+/* 메뉴바 텍스트 슬라이드 인 애니메이션 */
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

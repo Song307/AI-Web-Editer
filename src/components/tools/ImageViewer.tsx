@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, ZoomOut, ZoomIn, ArrowClockwise, ArrowCounterclockwise, ArrowRepeat, Download, Fullscreen, FullscreenExit } from 'react-bootstrap-icons';
 import { ImageFile } from '../../utils/db';
-import Modal from '../UI/shared/Modal';
-import ModalHeader from '../UI/shared/ModalHeader';
-import ModalToolbar from '../UI/shared/ModalToolbar';
+import Modal from '../ui/shared/Modal';
+import ModalHeader from '../ui/shared/ModalHeader';
+import ModalToolbar from '../ui/shared/ModalToolbar';
 
 interface ImageViewerProps {
   image: ImageFile | null;

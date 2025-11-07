@@ -1,227 +1,168 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FileText, ClipboardCheck, Gear, Plus, Trash3, Folder, Database, Palette, MenuButton, X, Robot, ChatDots } from 'react-bootstrap-icons';
-import { Document } from '../../utils/db';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { House, ClipboardCheck, Database, Palette, Robot, ChatDots, Gear, PinAngle, PinAngleFill } from 'react-bootstrap-icons';
 
-interface SidebarProps {
-  isSidebarOpen: boolean;
-  setIsSidebarOpen: (open: boolean) => void;
+interface MenubarProps {
+  isDarkMode: boolean;
   language: 'ko' | 'en';
-  documents: Document[];
-  createNewDocument: () => void;
-  handleRenameStart: (doc: Document) => void;
-  handleDelete: (id: string) => void;
-  editorRef: React.RefObject<{ handleSave: () => void; saveEditorStateToCookie: () => void } | null>;
+  isCompactLayout: boolean;
+  onHoverChange?: (isHovered: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({
-  isSidebarOpen,
-  setIsSidebarOpen,
-  language,
-  documents,
-  createNewDocument,
-  handleRenameStart,
-  handleDelete,
-  editorRef,
-}) => {
+const Menubar: React.FC<MenubarProps> = ({ isDarkMode, language, isCompactLayout, onHoverChange }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isHidden, setIsHidden] = useState(() => {
+    const saved = localStorage.getItem('isMenubarHidden');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [isHovered, setIsHovered] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('isMenubarHidden', JSON.stringify(isHidden));
+  }, [isHidden]);
+
+  useEffect(() => {
+    if (onHoverChange) {
+      onHoverChange(isHovered && isHidden);
+    }
+  }, [isHovered, isHidden, onHoverChange]);
+
+  const menuItems = [
+    {
+      icon: House,
+      label: language === 'ko' ? '대시보드' : 'Dashboard',
+      path: '/dashboard',
+    },
+    {
+      icon: ClipboardCheck,
+      label: language === 'ko' ? '클립보드' : 'Clipboard',
+      path: '/clipboard',
+    },
+    {
+      icon: Database,
+      label: language === 'ko' ? '저장소' : 'Storage',
+      path: '/storage',
+    },
+    {
+      icon: Palette,
+      label: language === 'ko' ? '이미지 편집' : 'Image Editor',
+      path: '/image-editor',
+    },
+    {
+      icon: Robot,
+      label: language === 'ko' ? 'AI 비서' : 'AI Secretary',
+      path: '/ai-secretary',
+    },
+    {
+      icon: ChatDots,
+      label: language === 'ko' ? 'AI 어시스턴트' : 'AI Assistant',
+      path: '/ai-assistant',
+    },
+  ];
+
+  const isActive = (path: string) => {
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
 
   const handleNavigation = (path: string) => {
-    // 에디터 상태를 쿠키에 저장
-    if (editorRef.current?.saveEditorStateToCookie) {
-      editorRef.current.saveEditorStateToCookie();
-    }
     navigate(path);
-    if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
+
+  const shouldShow = !isHidden || isHovered;
 
   return (
     <>
-      {/* Sidebar Overlay for Mobile */}
-      {isSidebarOpen && (
+      {/* Hover Trigger Area - 화면 좌측 끝 */}
+      {isHidden && !isHovered && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
+          className="fixed left-0 top-0 bottom-0 w-2 z-40"
+          onMouseEnter={() => setIsHovered(true)}
         />
       )}
 
-      <aside className={`bg-white dark:bg-gray-800 rounded-xl shadow-xl flex flex-col border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent transition-all duration-300 h-[calc(100vh-48px)] ${
-        isSidebarOpen ? 'p-6' : 'p-3'
-      } ${isSidebarOpen ? 'relative z-50' : 'relative z-30'}`}>
-        {/* Sidebar Toggle Button */}
-        <div className="flex justify-end mb-4">
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="flex items-center justify-center w-8 h-8 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105"
-            title={isSidebarOpen ? (language === 'ko' ? '사이드바 닫기' : 'Close Sidebar') : (language === 'ko' ? '사이드바 열기' : 'Open Sidebar')}
-          >
-            {isSidebarOpen ? <X size={16} /> : <MenuButton size={16} />}
-          </button>
-        </div>
-
-        {/* Icon Navigation */}
-        <div className={`flex flex-col gap-2 mb-6 pb-6 border-b border-gray-200 dark:border-gray-700 ${
-          !isSidebarOpen ? 'items-center' : ''
-        }`}>
-          <button
-            onClick={() => handleNavigation('/workspace')}
-            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
-              window.location.pathname === '/workspace'
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-            } ${!isSidebarOpen ? 'w-full justify-center px-2 py-4' : ''}`}
-            title={language === 'ko' ? '워크스페이스' : 'Workspace'}
-          >
-            <Folder size={isSidebarOpen ? 18 : 24} />
-            {isSidebarOpen && <span>{language === 'ko' ? '워크스페이스' : 'Workspace'}</span>}
-          </button>
-          <button
-            onClick={() => handleNavigation('/documents')}
-            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
-              (window.location.pathname.startsWith('/documents') || window.location.pathname === '/')
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-            } ${!isSidebarOpen ? 'w-full justify-center px-2 py-4' : ''}`}
-            title={language === 'ko' ? '문서' : 'Documents'}
-          >
-            <FileText size={isSidebarOpen ? 18 : 24} />
-            {isSidebarOpen && <span>{language === 'ko' ? '문서' : 'Documents'}</span>}
-          </button>
-          <button
-            onClick={() => handleNavigation('/ai-assistant')}
-            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
-              window.location.pathname === '/ai-assistant'
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
-            title={language === 'ko' ? 'AI 어시스턴트' : 'AI Assistant'}
-          >
-            <ChatDots size={isSidebarOpen ? 18 : 24} />
-            {isSidebarOpen && <span>{language === 'ko' ? 'AI 어시스턴트' : 'AI Assistant'}</span>}
-          </button>
-          <button
-            onClick={() => handleNavigation('/clipboard')}
-            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
-              window.location.pathname === '/clipboard'
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
-            title={language === 'ko' ? '클립보드' : 'Clipboard'}
-          >
-            <ClipboardCheck size={isSidebarOpen ? 18 : 24} />
-            {isSidebarOpen && <span>{language === 'ko' ? '클립보드' : 'Clipboard'}</span>}
-          </button>
-          <button
-            onClick={() => handleNavigation('/image-editor')}
-            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
-              window.location.pathname === '/image-editor'
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
-            title={language === 'ko' ? '이미지 편집기' : 'Image Editor'}
-          >
-            <Palette size={isSidebarOpen ? 18 : 24} />
-            {isSidebarOpen && <span>{language === 'ko' ? '이미지 편집기' : 'Image Editor'}</span>}
-          </button>
-          <button
-            onClick={() => handleNavigation('/storage')}
-            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
-              window.location.pathname === '/storage'
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
-            title={language === 'ko' ? '저장공간' : 'Storage'}
-          >
-            <Database size={isSidebarOpen ? 18 : 24} />
-            {isSidebarOpen && <span>{language === 'ko' ? '저장공간' : 'Storage'}</span>}
-          </button>
-          <button
-            onClick={() => handleNavigation('/settings')}
-            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
-              window.location.pathname === '/settings'
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
-            title={language === 'ko' ? '환경설정' : 'Settings'}
-          >
-            <Gear size={isSidebarOpen ? 18 : 24} />
-            {isSidebarOpen && <span>{language === 'ko' ? '환경설정' : 'Settings'}</span>}
-          </button>
-        </div>
-
-        {/* Document List - Only show when sidebar is open */}
-        {false && (window.location.pathname.startsWith('/documents') || window.location.pathname === '/') && isSidebarOpen && (
-          <div className="document-list">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="m-0 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                {language === 'ko' ? '최근 문서' : 'Recent Documents'}
-              </h2>
-              <button
-                onClick={createNewDocument}
-                className="flex items-center justify-center w-  7 h-7 bg-indigo-600 text-white border-none rounded cursor-pointer transition-transform hover:scale-110"
-                title={language === 'ko' ? '새 문서' : 'New Document'}
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-            {documents.map((doc) => (
-              <div
-                key={doc.id}
-                className="flex items-center justify-between p-2 mb-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  // 에디터 상태를 쿠키에 저장
-                  if (editorRef.current?.saveEditorStateToCookie) {
-                    editorRef.current.saveEditorStateToCookie();
-                  }
-                  setTimeout(() => {
-                    navigate(`/documents/${doc.id}`);
-                  }, 0);
-                }}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                    {doc.title}
-                  </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">
-                    {new Date(doc.updatedAt).toLocaleString(language === 'ko' ? 'ko-KR' : 'en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </div>
-                </div>
-                <div className="flex gap-1 ml-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRenameStart(doc);
-                    }}
-                    className="p-1 text-gray-600 dark:text-gray-400 hover:text-blue-500 transition-colors"
-                    title={language === 'ko' ? '이름 변경' : 'Rename'}
-                  >
-                    <Gear size={14} />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(doc.id);
-                    }}
-                    className="p-1 text-gray-600 dark:text-gray-400 hover:text-red-500 transition-colors"
-                    title={language === 'ko' ? '삭제' : 'Delete'}
-                  >
-                    <Trash3 size={14} />
-                  </button>
+      <aside 
+        className={`bg-white dark:bg-gray-900 flex flex-col border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-visible scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent py-4 px-2 fixed left-0 top-0 bottom-0 z-50 transition-transform duration-300 ease-in-out ${
+          isCompactLayout 
+            ? 'border-r' 
+            : 'rounded-xl shadow-lg border'
+        }`}
+        style={{ 
+          width: '80px', 
+          minWidth: '80px',
+          transform: shouldShow ? 'translateX(0)' : 'translateX(-100%)'
+        }}
+        onMouseLeave={() => {
+          if (isHidden) setIsHovered(false);
+        }}
+      >
+        {/* Menu Items */}
+        <div className="flex flex-col gap-2 items-center flex-1">
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.path);
+            
+            return (
+              <div key={item.path} className="relative group">
+                <button
+                  onClick={() => handleNavigation(item.path)}
+                  className={`flex items-center justify-center w-12 h-12 rounded-lg cursor-pointer transition-all ${
+                    active
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <Icon size={24} />
+                </button>
+                {/* Custom Tooltip */}
+                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-sm rounded-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-[100] shadow-lg">
+                  {item.label}
+                  <div className="absolute right-full top-1/2 -translate-y-1/2 mr-[-1px] border-[6px] border-transparent border-r-gray-900 dark:border-r-gray-700"></div>
                 </div>
               </div>
-            ))}
+            );
+          })}
+        </div>
+
+        {/* Bottom Section - 설정 & 숨기기 버튼 */}
+        <div className="flex flex-col gap-2 items-center mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+          {/* 설정 버튼 */}
+          <div className="relative group">
+            <button
+              onClick={() => handleNavigation('/settings')}
+              className={`flex items-center justify-center w-12 h-12 rounded-lg cursor-pointer transition-all ${
+                isActive('/settings')
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+            >
+              <Gear size={24} />
+            </button>
+            {/* Custom Tooltip */}
+            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-sm rounded-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-[100] shadow-lg">
+              {language === 'ko' ? '설정' : 'Settings'}
+              <div className="absolute right-full top-1/2 -translate-y-1/2 mr-[-1px] border-[6px] border-transparent border-r-gray-900 dark:border-r-gray-700"></div>
+            </div>
           </div>
-        )}
+
+          {/* 숨기기/고정 버튼 */}
+          <div className="relative group">
+            <button
+              onClick={() => setIsHidden(!isHidden)}
+              className="flex items-center justify-center w-12 h-12 rounded-lg cursor-pointer transition-all text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              {isHidden ? <PinAngle size={24} /> : <PinAngleFill size={24} />}
+            </button>
+            {/* Custom Tooltip */}
+            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-sm rounded-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-[100] shadow-lg">
+              {isHidden ? (language === 'ko' ? '메뉴바 고정' : 'Pin Menu') : (language === 'ko' ? '메뉴바 숨기기' : 'Hide Menu')}
+              <div className="absolute right-full top-1/2 -translate-y-1/2 mr-[-1px] border-[6px] border-transparent border-r-gray-900 dark:border-r-gray-700"></div>
+            </div>
+          </div>
+        </div>
       </aside>
     </>
   );
 };
 
-export default Sidebar;
+export default Menubar;

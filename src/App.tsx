@@ -1,48 +1,46 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import Editor from './components/Editor';
-import ClipboardPage from './components/UI/shared/ClipboardPage';
-import WorkspacePage from './components/WorkspacePage';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Dashboard from './components/Dashboard';
+import Workspace from './components/Workspace';
+import ClipboardPage from './components/ui/shared/ClipboardPage';
 import StoragePage from './components/StoragePage';
 import Settings from './components/Settings';
 import ImageEditor from './components/tools/ImageEditor';
 import AISecretaryCreator from './components/AISecretaryCreator';
 import AISecretaryManager from './components/AISecretaryManager';
 import AIAssistantPage from './components/AIAssistantPage';
-import Menubar from './components/layout/Menubar';
 import Taskbar from './components/layout/Taskbar';
-import { getAllDocuments, initDB, deleteDocument, Document } from './utils/db';
+import Menubar from './components/layout/Menubar';
+import { initDB } from './utils/db';
 import { Toaster } from 'react-hot-toast';
+import LandingPage from './components/LandingPage';
 import './App.css';
 
 function App() {
   return (
     <Router>
-      <AppContent />
+      <Routes>
+        <Route path="/landing" element={<LandingPage />} />
+        <Route path="/*" element={<AppContent />} />
+      </Routes>
     </Router>
   );
 }
 
 function AppContent() {
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [isDirty, setIsDirty] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
-    const saved = localStorage.getItem('isSidebarOpen');
-    return saved ? JSON.parse(saved) : true;
+  const [isMenubarHidden, setIsMenubarHidden] = useState(() => {
+    const saved = localStorage.getItem('isMenubarHidden');
+    return saved ? JSON.parse(saved) : false;
   });
+  const [isMenubarHoveredWhileHidden, setIsMenubarHoveredWhileHidden] = useState(false);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('isRightSidebarOpen');
     return saved ? JSON.parse(saved) : false;
-  });
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const saved = localStorage.getItem('sidebarWidth');
-    return saved ? parseInt(saved) : 320;
   });
   const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('rightSidebarWidth');
     return saved ? parseInt(saved) : 320;
   });
-  const [isResizing, setIsResizing] = useState(false);
   const [isResizingRight, setIsResizingRight] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('isDarkMode');
@@ -52,20 +50,39 @@ function AppContent() {
     const saved = localStorage.getItem('language');
     return (saved === 'ko' || saved === 'en') ? saved : 'ko';
   });
+  const [isCompactLayout, setIsCompactLayout] = useState(() => {
+    const saved = localStorage.getItem('isCompactLayout');
+    return saved ? JSON.parse(saved) : true; // 기본값: 컴팩트(여백 없음)
+  });
   const [selectionPreview, setSelectionPreview] = useState<string | null>(null);
   const [selectionRange, setSelectionRange] = useState<{ from: number; to: number } | null>(null);
-  const editorRef = useRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void } | null>(null);
-  const navigate = useNavigate();
 
-  // 사이드바 상태 변경 시 localStorage에 저장
+  // 메뉴바 숨김 상태 동기화
   useEffect(() => {
-    localStorage.setItem('isSidebarOpen', JSON.stringify(isSidebarOpen));
-  }, [isSidebarOpen]);
+    const handleMenubarHiddenChange = () => {
+      const saved = localStorage.getItem('isMenubarHidden');
+      if (saved) {
+        setIsMenubarHidden(JSON.parse(saved));
+      }
+    };
 
-  // 사이드바 너비 변경 시 localStorage에 저장
-  useEffect(() => {
-    localStorage.setItem('sidebarWidth', sidebarWidth.toString());
-  }, [sidebarWidth]);
+    window.addEventListener('storage', handleMenubarHiddenChange);
+    // 초기 상태 체크
+    const interval = setInterval(() => {
+      const saved = localStorage.getItem('isMenubarHidden');
+      if (saved) {
+        const newValue = JSON.parse(saved);
+        if (newValue !== isMenubarHidden) {
+          setIsMenubarHidden(newValue);
+        }
+      }
+    }, 100);
+
+    return () => {
+      window.removeEventListener('storage', handleMenubarHiddenChange);
+      clearInterval(interval);
+    };
+  }, [isMenubarHidden]);
 
   // 우측 사이드바 너비 변경 시 localStorage에 저장
   useEffect(() => {
@@ -82,14 +99,12 @@ function AppContent() {
       try {
         await initDB();
         console.log('App: DB 초기화 성공');
-        await loadDocuments();
       } catch (error) {
         console.error('App: DB 초기화 실패:', error);
         // 재시도
         try {
           console.log('App: DB 재초기화 시도');
           await initDB();
-          await loadDocuments();
         } catch (retryError) {
           console.error('App: DB 재초기화도 실패:', retryError);
         }
@@ -113,27 +128,26 @@ function AppContent() {
     localStorage.setItem('language', language);
   }, [language]);
 
+  // Save layout preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('isCompactLayout', JSON.stringify(isCompactLayout));
+  }, [isCompactLayout]);
+
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
+  };
+
+  const toggleLayout = () => {
+    setIsCompactLayout(!isCompactLayout);
   };
 
   const clearSelection = () => {
     setSelectionPreview(null);
     setSelectionRange(null);
-    // 하이라이트 제거
-    if (editorRef.current) {
-      editorRef.current.clearHighlight();
-    }
   };
 
   const openTaskbar = () => {
     setIsRightSidebarOpen(true);
-  };
-
-  // 사이드바 리사이저 핸들러
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
   };
 
   // 우측 사이드바 리사이저 핸들러
@@ -144,16 +158,6 @@ function AppContent() {
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (isResizing) {
-        const minWidth = 200;
-        const maxWidth = 600;
-        const newWidth = e.clientX;
-
-        if (newWidth >= minWidth && newWidth <= maxWidth) {
-          setSidebarWidth(newWidth);
-        }
-      }
-
       if (isResizingRight) {
         const minWidth = 250;
         const maxWidth = 800;
@@ -166,11 +170,10 @@ function AppContent() {
     };
 
     const handleMouseUp = () => {
-      setIsResizing(false);
       setIsResizingRight(false);
     };
 
-    if (isResizing || isResizingRight) {
+    if (isResizingRight) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = 'col-resize';
@@ -183,54 +186,25 @@ function AppContent() {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isResizing, isResizingRight]);
-
-  const loadDocuments = async () => {
-    const docs = await getAllDocuments();
-    // Sort by updatedAt in descending order (most recent first)
-    const sortedDocs = docs.sort((a, b) => {
-      const dateA = new Date(a.updatedAt).getTime();
-      const dateB = new Date(b.updatedAt).getTime();
-      return dateB - dateA;
-    });
-    setDocuments(sortedDocs);
-  };
-
-  const handleSave = (doc: Document) => {
-    loadDocuments(); // Refresh the list
-  };
-
-  const handleDelete = async (id: string) => {
-    if (window.confirm(language === 'ko' ? '정말로 이 문서를 삭제하시겠습니까?' : 'Are you sure you want to delete this document?')) {
-      await deleteDocument(id);
-      loadDocuments();
-    }
-  };
-
-  const handleRenameStart = (doc: Document) => {
-    // 문서 이름 변경 로직은 WorkspacePage에서 처리하므로 여기서는 빈 함수로 정의
-    console.log('Rename document:', doc);
-  };
-
-    const createNewDocument = () => {
-    if (isDirty) {
-      const save = window.confirm(language === 'ko' ? '저장되지 않은 변경사항이 있습니다. 새 문서를 만들기 전에 저장하시겠습니까?' : 'You have unsaved changes. Do you want to save before creating a new document?');
-      if (save) {
-        editorRef.current?.handleSave();
-      }
-    }
-    navigate('/documents');
-  };
+  }, [isResizingRight]);
 
   return (
-    <div className="min-h-screen p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
+    <div className={`flex h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 transition-colors ${isCompactLayout ? '' : 'p-4 gap-4'}`}>
+      
+      {/* 좌측 메뉴바 */}
+      <Menubar 
+        isDarkMode={isDarkMode}
+        language={language}
+        isCompactLayout={isCompactLayout}
+        onHoverChange={setIsMenubarHoveredWhileHidden}
+      />
       
       {/* 우측 상단 고정 토글 버튼 */}
       {!isRightSidebarOpen && (
         <button
           onClick={() => setIsRightSidebarOpen(true)}
-          className="fixed top-6 right-6 z-50 p-2 rounded-lg transition-colors"
-          title="사이드바 열기"
+          className="fixed top-6 right-6 z-50 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-all"
+          title="AI 채팅 열기"
         >
           <svg
             className="w-6 h-6 text-gray-700 dark:text-gray-300"
@@ -238,84 +212,52 @@ function AppContent() {
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>
         </button>
       )}
       
+      {/* 메인 컨텐츠 영역 */}
       <div 
-        className="flex h-[calc(100vh-48px)] relative"
+        className="flex-1 flex flex-col overflow-hidden transition-all duration-300"
         style={{ 
+          marginLeft: (isMenubarHidden && !isMenubarHoveredWhileHidden) ? '0' : '80px',
           marginRight: isRightSidebarOpen ? `${rightSidebarWidth}px` : '0',
-          transition: isResizing || isResizingRight ? 'none' : 'margin-right 300ms ease-in-out'
+          transition: 'margin 300ms ease-in-out'
         }}
       >
-        {/* 좌측 사이드바 */}
-        <div 
-          style={{ 
-            width: isSidebarOpen ? `${sidebarWidth}px` : '80px',
-            minWidth: isSidebarOpen ? '200px' : '80px',
-            maxWidth: isSidebarOpen ? '600px' : '80px',
-            transition: isResizing ? 'none' : 'width 300ms ease-in-out'
-          }}
-          className="flex-shrink-0"
-        >
-          <Menubar
-            isSidebarOpen={isSidebarOpen}
-            setIsSidebarOpen={setIsSidebarOpen}
-            language={language}
-            documents={documents}
-            createNewDocument={createNewDocument}
-            handleRenameStart={handleRenameStart}
-            handleDelete={handleDelete}
-            editorRef={editorRef}
-          />
-        </div>
-
-        {/* 리사이저 */}
-        {isSidebarOpen && (
-          <div
-            className="w-1 hover:w-2 bg-transparent hover:bg-blue-500 cursor-col-resize transition-all flex-shrink-0 relative group"
-            onMouseDown={handleMouseDown}
-          >
-            <div className="absolute inset-y-0 -left-1 -right-1 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <div className="w-1 h-12 bg-blue-500 rounded-full"></div>
-            </div>
-          </div>
-        )}
-
         {/* 메인 컨텐츠 */}
-        <div className="flex-1 min-w-0 ml-6">
-          <main className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto h-full flex flex-col scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
-          <Routes>
-            <Route path="/" element={<Navigate to="/workspace" replace />} />
-            <Route path="/documents" element={<Editor ref={editorRef} onSave={handleSave} onDirtyChange={setIsDirty} onSelectionPreviewChange={setSelectionPreview} onSelectionRangeChange={setSelectionRange} onOpenTaskbar={openTaskbar} />} />
-            <Route path="/documents/:id" element={<Editor ref={editorRef} onSave={handleSave} onDirtyChange={setIsDirty} onSelectionPreviewChange={setSelectionPreview} onSelectionRangeChange={setSelectionRange} onOpenTaskbar={openTaskbar} />} />
-            <Route path="/clipboard" element={<ClipboardPage />} />
-            <Route path="/storage" element={<StoragePage />} />
-            <Route path="/image-editor" element={<ImageEditor />} />
-            <Route path="/ai-secretary" element={<AISecretaryManager />} />
-            <Route path="/ai-secretary/create" element={<AISecretaryCreator />} />
-            <Route path="/ai-assistant" element={<AIAssistantPage />} />
-            <Route path="/workspace" element={<WorkspacePage onDocumentSelect={(id) => {
-              if (id === 'new') {
-                // 새 문서 만들기 로직
-                navigate('/documents');
-              } else {
-                navigate(`/documents/${id}`);
-              }
-            }} />} />
-            <Route path="/settings" element={
-              <Settings
-                isDarkMode={isDarkMode}
-                onToggleTheme={toggleTheme}
-                language={language}
-                onLanguageChange={setLanguage}
+        <main className="flex-1 overflow-hidden">
+          <div className="h-full bg-white dark:bg-gray-900 overflow-hidden">
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard isDarkMode={isDarkMode} />} />
+              <Route path="/workspace" element={<Workspace isDarkMode={isDarkMode} onSelectionPreviewChange={setSelectionPreview} onSelectionRangeChange={setSelectionRange} onOpenTaskbar={() => setIsRightSidebarOpen(true)} />} />
+              <Route path="/workspace/:id" element={<Workspace isDarkMode={isDarkMode} onSelectionPreviewChange={setSelectionPreview} onSelectionRangeChange={setSelectionRange} onOpenTaskbar={() => setIsRightSidebarOpen(true)} />} />
+              <Route path="/clipboard" element={<ClipboardPage />} />
+              <Route path="/storage" element={<StoragePage />} />
+              <Route 
+                path="/settings" 
+                element={
+                  <Settings 
+                    isDarkMode={isDarkMode} 
+                    onToggleTheme={toggleTheme}
+                    language={language}
+                    onLanguageChange={setLanguage}
+                    isMenubarHidden={isMenubarHidden}
+                    onToggleMenubar={() => setIsMenubarHidden(!isMenubarHidden)}
+                    isCompactLayout={isMenubarHidden}
+                    onToggleLayout={toggleLayout}
+                  />
+                } 
               />
-            } />
-          </Routes>
+              <Route path="/image-editor" element={<ImageEditor />} />
+              <Route path="/ai-secretary" element={<AISecretaryManager />} />
+              <Route path="/ai-secretary/create" element={<AISecretaryCreator />} />
+              <Route path="/ai-assistant" element={<AIAssistantPage />} />
+            </Routes>
+          </div>
         </main>
-        </div>
       </div>
       
       {/* 우측 사이드바 - 최상위 레벨 */}
@@ -325,29 +267,19 @@ function AppContent() {
         isResizingRight={isResizingRight}
         onClose={() => {
           setIsRightSidebarOpen(false);
-          // Taskbar 닫을 때 하이라이트 제거
-          if (editorRef.current) {
-            editorRef.current.clearHighlight();
-          }
         }}
         onMouseDown={handleRightMouseDown}
         selectionPreview={selectionPreview}
         selectionRange={selectionRange}
         onClearSelection={clearSelection}
         onReplaceSelection={(newText: string) => {
-          if (editorRef.current) {
-            editorRef.current.replaceSelection(newText);
-          }
+          // Replace selection will be handled by Workspace
         }}
         onHighlightSelection={(from: number, to: number) => {
-          if (editorRef.current) {
-            editorRef.current.highlightSelection(from, to);
-          }
+          // Highlight will be handled by Workspace
         }}
         onClearHighlight={() => {
-          if (editorRef.current) {
-            editorRef.current.clearHighlight();
-          }
+          // Clear highlight will be handled by Workspace
         }}
       />
       <Toaster

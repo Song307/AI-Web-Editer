@@ -5,6 +5,10 @@ interface SettingsProps {
   onToggleTheme: () => void;
   language: 'ko' | 'en';
   onLanguageChange: (language: 'ko' | 'en') => void;
+  isCompactLayout: boolean;
+  onToggleLayout: () => void;
+  isMenubarHidden?: boolean;
+  onToggleMenubar?: () => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({
@@ -12,25 +16,35 @@ const Settings: React.FC<SettingsProps> = ({
   onToggleTheme,
   language,
   onLanguageChange,
+  isCompactLayout,
+  onToggleLayout,
 }) => {
   const texts = {
     ko: {
       title: '환경설정',
       theme: '테마',
       language: '언어',
+      layout: '레이아웃',
       lightMode: '라이트 모드',
       darkMode: '다크 모드',
       korean: '한국어',
       english: 'English',
+      compactLayout: '컴팩트 레이아웃',
+      spacedLayout: '여백 레이아웃',
+      layoutDescription: '화면 요소들 사이에 여백을 적용합니다',
     },
     en: {
       title: 'Settings',
       theme: 'Theme',
       language: 'Language',
+      layout: 'Layout',
       lightMode: 'Light Mode',
       darkMode: 'Dark Mode',
       korean: '한국어',
       english: 'English',
+      compactLayout: 'Compact Layout',
+      spacedLayout: 'Spaced Layout',
+      layoutDescription: 'Apply spacing between screen elements',
     },
   };
 
@@ -52,6 +66,23 @@ const Settings: React.FC<SettingsProps> = ({
             }`}
           >
             {isDarkMode ? '☀️ ' + t.lightMode : '🌙 ' + t.darkMode}
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-8 p-5 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">{t.layout}</h3>
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">{t.layoutDescription}</p>
+        <div className="flex items-center">
+          <button
+            onClick={onToggleLayout}
+            className={`px-6 py-3 border-2 rounded-xl font-semibold cursor-pointer transition-all duration-300 flex items-center gap-2 ${
+              isCompactLayout
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 hover:border-indigo-500 hover:shadow-md hover:transform hover:-translate-y-0.5'
+                : 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white border-indigo-500 shadow-lg transform -translate-y-0.5'
+            }`}
+          >
+            {isCompactLayout ? '📐 ' + t.spacedLayout : '📦 ' + t.compactLayout}
           </button>
         </div>
       </div>

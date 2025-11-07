@@ -59,7 +59,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
 
   return (
     <div 
-      className="fixed bottom-10 z-40 max-w-[95vw] transition-all duration-300"
+      className="fixed bottom-12 z-40 max-w-[95vw] transition-all duration-300"
       style={{
         left: '50%',
         transform: `translateX(calc(-50% + ${toolbarOffset}px))`

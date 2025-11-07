@@ -5,11 +5,11 @@ import { getAllDocuments, deleteDocument, updateDocument, Document, getAllImages
 import PDFViewer from './tools/PDFViewer';
 import ImageViewer from './tools/ImageViewer';
 import VideoPlayer from './tools/VideoPlayer';
-import RenameModal from './UI/shared/RenameModal';
-import ConfirmModal from './UI/shared/ConfirmModal';
-import Modal from './UI/shared/Modal';
-import ModalHeader from './UI/shared/ModalHeader';
-import ModalToolbar from './UI/shared/ModalToolbar';
+import RenameModal from './ui/shared/RenameModal';
+import ConfirmModal from './ui/shared/ConfirmModal';
+import Modal from './ui/shared/Modal';
+import ModalHeader from './ui/shared/ModalHeader';
+import ModalToolbar from './ui/shared/ModalToolbar';
 import './WorkspacePage.css';
 
 interface WorkspacePageProps {

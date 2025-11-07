@@ -1,8 +1,8 @@
 import React, { useState, forwardRef, useImperativeHandle, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
-import RenameModal from './UI/shared/RenameModal';
-import TabCloseConfirmModal from './UI/shared/TabCloseConfirmModal';
+import RenameModal from './ui/shared/RenameModal';
+import TabCloseConfirmModal from './ui/shared/TabCloseConfirmModal';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Heading from '@tiptap/extension-heading';
@@ -1677,7 +1677,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   }
 
   return (
-    <div className="flex-1 flex flex-col relative overflow-visible min-h-0">
+    <div className="h-full flex flex-col relative overflow-hidden">
       {/* 탭 헤더 */}
       <TabHeader
         tabs={tabs}
@@ -1721,7 +1721,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       />
       
       {/* 메인 컨텐츠 영역 - 좌측 사이드바와 에디터 */}
-      <div className="flex-1 flex relative overflow-hidden">
+      <div className="flex-1 flex relative min-h-0">
         {/* 문서 목록 사이드바 */}
         <DocumentListSidebar
           ref={documentListSidebarRef}
@@ -1865,7 +1865,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         {/* 에디터 영역 */}
         <div 
           id="editor-container" 
-          className="flex-1 mx-6 mt-4 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden flex flex-col focus-within:ring-1 focus-within:ring-opacity-30 focus-within:ring-blue-300 dark:focus-within:ring-blue-700 focus-within:border-blue-300 dark:focus-within:border-blue-500 mb-6 transition-all duration-200"
+          className="flex-1 mx-6 mt-4 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-opacity-30 focus-within:ring-blue-300 dark:focus-within:ring-blue-700 focus-within:border-blue-300 dark:focus-within:border-blue-500 mb-6 transition-all duration-200 min-h-0"
           style={{'--tw-ring-color': 'rgba(99, 102, 241, 0.3)'} as React.CSSProperties}
         >
         
@@ -2095,7 +2095,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
           }
           onOpenTaskbar?.();
         }}
-        className="fixed bottom-10 right-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full p-4 shadow-lg transition-all hover:scale-110 hover:shadow-xl z-50"
+        className="fixed bottom-12 right-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full p-4 shadow-lg transition-all hover:scale-110 hover:shadow-xl z-50"
         title="AI 어시스턴트"
       >
         <Robot size={24} />
