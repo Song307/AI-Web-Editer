@@ -46,21 +46,25 @@ const AISelectionHighlight = Extension.create({
           apply(tr, old) {
             // 트랜잭션에서 AI 선택 범위를 가져옴
             const aiSelection = tr.getMeta('aiSelection');
+            console.log('AISelectionHighlight: apply called, aiSelection =', aiSelection);
             if (aiSelection) {
               const { from, to } = aiSelection;
               if (from !== to) {
                 const decoration = Decoration.inline(from, to, {
                   class: 'ai-selection-highlight',
                 });
+                console.log('AISelectionHighlight: creating decoration for', from, to);
                 return DecorationSet.create(tr.doc, [decoration]);
               }
             }
             // aiSelection이 null이면 하이라이트 제거
             if (aiSelection === null) {
+              console.log('AISelectionHighlight: removing decoration (aiSelection is null)');
               return DecorationSet.empty;
             }
-            // 그 외의 경우 기존 decoration 유지 (mapping 적용)
-            return old.map(tr.mapping, tr.doc);
+            // 그 외의 경우 기존 decoration 유지
+            console.log('AISelectionHighlight: keeping old decorations');
+            return old;
           },
         },
         props: {
@@ -109,6 +113,7 @@ interface EditorProps {
   onSelectionRangeChange?: (range: { from: number; to: number } | null) => void;
   onOpenTaskbar?: () => void;
   onOpenDocument?: (docId: string) => void;
+  onApiReady?: (api: { replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }) => void;
   // optional inputs from Workspace to ensure content displays when Workspace drives tabs
   initialContent?: string;
   initialContentType?: 'markdown' | 'html';
@@ -119,7 +124,7 @@ interface EditorProps {
   setActiveTabId?: (id: string) => void;
 }
 
-const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId }, ref) => {
+const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, onApiReady, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId }, ref) => {
   const { id } = useParams<{ id: string }>();
   const documentId = id;
   const [title, setTitle] = useState('Untitled Document');
@@ -156,6 +161,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const [slashMenuPosition, setSlashMenuPosition] = useState({ top: 0, left: 0 });
   const [selectedMenuIndex, setSelectedMenuIndex] = useState(0);
   const [selectedTextForAI, setSelectedTextForAI] = useState<{ from: number; to: number; text: string } | null>(null);
+  const [highlightDisabled, setHighlightDisabled] = useState(false);
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [showImageUrlModal, setShowImageUrlModal] = useState(false);
 
@@ -215,6 +221,9 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
 
       // 슬래시 메뉴가 열려있을 때는 닫기 로직을 실행하지 않음
       // 메뉴는 키보드 이벤트에서만 제어
+    },
+    onSelectionUpdate: ({ editor }) => {
+      // 선택 영역 변경 시 별도 처리 없음 - AI 버튼 클릭 시에만 하이라이트
     },
     onCreate: ({ editor }) => {
       setIsEditorReady(true);
@@ -758,6 +767,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
 
   // selectionPreviewImage가 변경될 때 부모 컴포넌트에 알림
   useEffect(() => {
+    console.log('Editor: useEffect triggered by selectedTextForAI change, selectedTextForAI =', selectedTextForAI);
     onSelectionPreviewChange?.(selectedTextForAI?.text ?? null);
     onSelectionRangeChange?.(selectedTextForAI ? { from: selectedTextForAI.from, to: selectedTextForAI.to } : null);
   }, [selectedTextForAI, onSelectionPreviewChange, onSelectionRangeChange]);
@@ -1703,13 +1713,29 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       }
     },
     clearHighlight: () => {
+      console.log('Editor: clearHighlight called, selectedTextForAI before =', selectedTextForAI);
       if (editor) {
         // 하이라이트 제거
         const tr = editor.state.tr.setMeta('aiSelection', null);
         editor.view.dispatch(tr);
+        console.log('Editor: clearHighlight dispatched transaction');
+        // 선택된 텍스트 상태도 초기화
+        setSelectedTextForAI(null);
+        setHighlightDisabled(true);
+        console.log('Editor: setSelectedTextForAI(null) and setHighlightDisabled(true) called');
+      } else {
+        console.log('Editor: clearHighlight called but editor is null');
       }
     },
   }));
+
+  // Editor API가 준비되면 부모에게 알림
+  useEffect(() => {
+    if (onApiReady && ref && typeof ref === 'object' && 'current' in ref && ref.current) {
+      console.log('Editor: onApiReady called with API:', ref.current);
+      onApiReady(ref.current);
+    }
+  }, [onApiReady]);
 
   if (!editor) {
     return null;
@@ -2106,10 +2132,10 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
             try {
               const { from, to } = editor.state.selection;
               const selectedText = getSelectionAsMarkdown(from, to);
+              console.log('Editor: AI button clicked, selection:', { from, to, selectedText });
               if (selectedText && selectedText.trim()) {
                 setSelectedTextForAI({ from, to, text: selectedText });
-                onSelectionPreviewChange?.(selectedText);
-                onSelectionRangeChange?.({ from, to });
+                setHighlightDisabled(false); // AI 버튼 클릭 시 하이라이트 활성화
                 // AI 버튼 클릭 시 하이라이트 표시
                 if (editor) {
                   const tr = editor.state.tr.setMeta('aiSelection', { from, to });
@@ -2117,13 +2143,11 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
                 }
               } else {
                 setSelectedTextForAI(null);
-                onSelectionPreviewChange?.(null);
-                onSelectionRangeChange?.(null);
+                setHighlightDisabled(true);
               }
             } catch (e) {
               setSelectedTextForAI(null);
-              onSelectionPreviewChange?.(null);
-              onSelectionRangeChange?.(null);
+              setHighlightDisabled(true);
             }
           }
           onOpenTaskbar?.();

@@ -7,9 +7,11 @@ interface MenubarProps {
   language: 'ko' | 'en';
   isCompactLayout: boolean;
   onHoverChange?: (isHovered: boolean) => void;
+  // notify parent when menubar visibility changes (shown/hidden)
+  onVisibleChange?: (visible: boolean) => void;
 }
 
-const Menubar: React.FC<MenubarProps> = ({ isDarkMode, language, isCompactLayout, onHoverChange }) => {
+const Menubar: React.FC<MenubarProps> = ({ isDarkMode, language, isCompactLayout, onHoverChange, onVisibleChange }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isHidden, setIsHidden] = useState(() => {
@@ -69,28 +71,52 @@ const Menubar: React.FC<MenubarProps> = ({ isDarkMode, language, isCompactLayout
     navigate(path);
   };
 
+  // Show when not hidden or when hovered (both layouts). For spaced layout we'll
+  // hide fully (translateX(-100%)) when hidden, but hovering the left edge will reveal it.
   const shouldShow = !isHidden || isHovered;
+
+  // Menu geometry
+  const menubarInset = isCompactLayout ? 0 : 16; // px inset from left when shown
+  const menubarWidth = 80; // px (matches style width)
+  // When hidden we must shift by inset + width to fully move the bar off-screen
+  const hideShiftPx = menubarInset + menubarWidth;
+  const transformStyle = shouldShow ? 'translateX(0)' : `translateX(-${hideShiftPx}px)`;
+
+  // Notify parent about visibility changes so the main content can animate margin
+  useEffect(() => {
+    if (onVisibleChange) onVisibleChange(shouldShow);
+  }, [shouldShow, onVisibleChange]);
 
   return (
     <>
       {/* Hover Trigger Area - 화면 좌측 끝 */}
+      {/* Hover trigger (left edge). When hidden, hovering the left edge reveals the menubar
+          for both compact and spaced layouts. */}
       {isHidden && !isHovered && (
+        // Left-edge hover trigger: placed at the very left of the viewport so the user
+        // can move the mouse to the screen edge to reveal the menubar (not hovering the menubar itself).
         <div
-          className="fixed left-0 top-0 bottom-0 w-2 z-40"
+          className="fixed left-0 top-0 bottom-0"
           onMouseEnter={() => setIsHovered(true)}
+          // wider trigger so it's easy to hit, extremely high z-index to avoid being covered
+          style={{ width: '20px', zIndex: 9999, background: 'transparent', pointerEvents: 'auto' }}
         />
       )}
 
       <aside 
-        className={`bg-white dark:bg-gray-900 flex flex-col border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-visible scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent py-4 px-2 fixed left-0 top-0 bottom-0 z-50 transition-transform duration-300 ease-in-out ${
+        className={`bg-white dark:bg-gray-900 flex flex-col border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-visible scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent py-4 px-2 fixed z-50 transition-transform duration-300 ease-in-out ${
           isCompactLayout 
             ? 'border-r' 
             : 'rounded-xl shadow-lg border'
         }`}
-        style={{ 
-          width: '80px', 
-          minWidth: '80px',
-          transform: shouldShow ? 'translateX(0)' : 'translateX(-100%)'
+        style={{
+          width: `${menubarWidth}px`,
+          minWidth: `${menubarWidth}px`,
+          transform: transformStyle,
+          // when not compact layout, inset the menubar to create surrounding spacing
+          left: isCompactLayout ? 0 : `${menubarInset}px`,
+          top: isCompactLayout ? 0 : `${menubarInset}px`,
+          bottom: isCompactLayout ? 0 : `${menubarInset}px`
         }}
         onMouseLeave={() => {
           if (isHidden) setIsHovered(false);

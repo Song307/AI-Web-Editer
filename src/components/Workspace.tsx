@@ -21,6 +21,7 @@ interface WorkspaceProps {
   onSelectionPreviewChange?: (preview: string | null) => void;
   onSelectionRangeChange?: (range: { from: number; to: number } | null) => void;
   onOpenTaskbar?: () => void;
+  onRegisterApi?: (api: { replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void } | null) => void;
 }
 
 const Workspace: React.FC<WorkspaceProps> = ({
@@ -28,12 +29,21 @@ const Workspace: React.FC<WorkspaceProps> = ({
   onSelectionPreviewChange,
   onSelectionRangeChange,
   onOpenTaskbar,
+  onRegisterApi,
 }) => {
+  const editorRef = useRef<any>(null);
   // taskList: canonical list of workspace tasks (persisted to cookie)
   const [taskList, setTaskList] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [showNewFileModal, setShowNewFileModal] = useState(false);
+  // Ensure parent receives the Editor API when the Editor mounts (activeTabId changes)
+  useEffect(() => {
+    if (!onRegisterApi) return;
+
+    // API 등록은 이제 Editor의 onApiReady 콜백을 통해 이루어짐
+    // cleanup은 필요 없음 - App에서 null을 받았을 때 특별한 처리 없음
+  }, [activeTabId, onRegisterApi]);
   // Keep a ref to the latest taskList so unmount cleanup can log the current value
   type TaskListRefType = Tab[];
   const taskListRef = React.useRef<TaskListRefType | null>(null as any);
@@ -356,6 +366,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
         console.error('Failed to parse workspaceTasks cookie', err);
       }
     }
+
+    // NOTE: Editor API registration is handled in a separate effect that runs when the active tab/editor mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -393,6 +405,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 onSelectionRangeChange={onSelectionRangeChange}
                 onOpenTaskbar={onOpenTaskbar}
                 onOpenDocument={(docId: string) => loadDocument(docId)}
+                onApiReady={onRegisterApi}
+                ref={editorRef}
                 tabs={editorTabs}
                 setTabs={setTabsFromEditor}
                 activeTabId={activeTabId || ''}

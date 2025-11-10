@@ -33,6 +33,11 @@ function AppContent() {
     return saved ? JSON.parse(saved) : false;
   });
   const [isMenubarHoveredWhileHidden, setIsMenubarHoveredWhileHidden] = useState(false);
+  const [isMenubarVisible, setIsMenubarVisible] = useState(() => {
+    const saved = localStorage.getItem('isMenubarHidden');
+    const hidden = saved ? JSON.parse(saved) : false;
+    return !hidden;
+  });
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('isRightSidebarOpen');
     return saved ? JSON.parse(saved) : false;
@@ -56,6 +61,24 @@ function AppContent() {
   });
   const [selectionPreview, setSelectionPreview] = useState<string | null>(null);
   const [selectionRange, setSelectionRange] = useState<{ from: number; to: number } | null>(null);
+  const workspaceApiRef = React.useRef<{
+    replaceSelection?: (text: string) => void;
+    highlightSelection?: (from: number, to: number) => void;
+    clearHighlight?: () => void;
+  } | null>(null);
+
+  const onRegisterApi = React.useCallback((api: typeof workspaceApiRef.current) => {
+    console.log('App: onRegisterApi called', api);
+    workspaceApiRef.current = api;
+  }, []);
+
+  const onSelectionPreviewChange = React.useCallback((preview: string | null) => {
+    setSelectionPreview(preview);
+  }, []);
+
+  const onSelectionRangeChange = React.useCallback((range: { from: number; to: number } | null) => {
+    setSelectionRange(range);
+  }, []);
 
   // 메뉴바 숨김 상태 동기화
   useEffect(() => {
@@ -83,6 +106,11 @@ function AppContent() {
       clearInterval(interval);
     };
   }, [isMenubarHidden]);
+
+  // Keep menubarVisible in sync with hidden/hover state in case other tabs change localStorage
+  useEffect(() => {
+    setIsMenubarVisible(!isMenubarHidden || isMenubarHoveredWhileHidden);
+  }, [isMenubarHidden, isMenubarHoveredWhileHidden]);
 
   // 우측 사이드바 너비 변경 시 localStorage에 저장
   useEffect(() => {
@@ -195,14 +223,16 @@ function AppContent() {
         language={language}
         isCompactLayout={isCompactLayout}
         onHoverChange={setIsMenubarHoveredWhileHidden}
+        onVisibleChange={setIsMenubarVisible}
       />
       
       {/* 우측 상단 고정 토글 버튼 */}
       {!isRightSidebarOpen && (
         <button
           onClick={() => setIsRightSidebarOpen(true)}
-          className="fixed top-6 right-6 z-50 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-all"
+          className="fixed top-6 right-10 z-50 p-1 bg-transparent hover:bg-transparent transition-none"
           title="AI 채팅 열기"
+          aria-label="Open AI chat"
         >
           <svg
             className="w-6 h-6 text-gray-700 dark:text-gray-300"
@@ -219,21 +249,66 @@ function AppContent() {
       <div 
         className="flex-1 flex flex-col overflow-hidden transition-all duration-300"
         style={{ 
-          marginLeft: (isMenubarHidden && !isMenubarHoveredWhileHidden) ? '0' : '80px',
+          // When not compact layout we inset the menubar by 16px; account for that in main content margin
+          marginLeft: isMenubarVisible ? (isCompactLayout ? '80px' : '96px') : '0',
           marginRight: isRightSidebarOpen ? `${rightSidebarWidth}px` : '0',
           transition: 'margin 300ms ease-in-out'
         }}
       >
         {/* 메인 컨텐츠 */}
         <main className="flex-1 overflow-hidden">
-          <div className="h-full bg-white dark:bg-gray-900 overflow-hidden">
+          <div className={`h-full bg-white dark:bg-gray-900 overflow-hidden transition-shadow duration-300 ${isCompactLayout ? '' : 'rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/5 z-40'}`}>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard isDarkMode={isDarkMode} />} />
-              <Route path="/workspace" element={<Workspace isDarkMode={isDarkMode} />} />
-              <Route path="/workspace/:id" element={<Workspace isDarkMode={isDarkMode} />} />
-              <Route path="/documents" element={<Workspace isDarkMode={isDarkMode} />} />
-              <Route path="/documents/:id" element={<Workspace isDarkMode={isDarkMode} />} />
+              <Route
+                path="/workspace"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                  />
+                }
+              />
+              <Route
+                path="/workspace/:id"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                  />
+                }
+              />
+              <Route
+                path="/documents"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                  />
+                }
+              />
+              <Route
+                path="/documents/:id"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                  />
+                }
+              />
               <Route path="/clipboard" element={<ClipboardPage />} />
               <Route path="/storage" element={<StoragePage />} />
               <Route 
@@ -271,15 +346,45 @@ function AppContent() {
         onMouseDown={handleRightMouseDown}
         selectionPreview={selectionPreview}
         selectionRange={selectionRange}
-        onClearSelection={clearSelection}
+        onClearSelection={() => {
+          // Clear App-level selection state and also clear editor highlight if present
+          console.log('App: onClearSelection called, workspaceApiRef =', workspaceApiRef.current);
+          console.log('App: Before clearSelection, selectionPreview =', selectionPreview);
+          clearSelection();
+          console.log('App: After clearSelection, selectionPreview =', selectionPreview);
+          try {
+            workspaceApiRef.current?.clearHighlight?.();
+            console.log('App: clearHighlight called successfully');
+          } catch (e) {
+            console.error('App: clearHighlight call failed', e);
+          }
+        }}
         onReplaceSelection={(newText: string) => {
-          // Replace selection will be handled by Workspace
+          console.log('App: onReplaceSelection called, workspaceApiRef =', workspaceApiRef.current, 'newText=', newText);
+          // Ask the workspace/editor to replace the selected text
+          try {
+            workspaceApiRef.current?.replaceSelection?.(newText);
+          } catch (e) {
+            console.error('App: replaceSelection call failed', e);
+          }
+          // Clear selection state in App and hide highlight
+          clearSelection();
+          try {
+            workspaceApiRef.current?.clearHighlight?.();
+          } catch (e) {
+            console.error('App: clearHighlight call failed', e);
+          }
         }}
         onHighlightSelection={(from: number, to: number) => {
-          // Highlight will be handled by Workspace
+          console.log('App: onHighlightSelection called', { from, to, api: workspaceApiRef.current });
+          try {
+            workspaceApiRef.current?.highlightSelection?.(from, to);
+          } catch (e) {
+            console.error('App: highlightSelection call failed', e);
+          }
         }}
         onClearHighlight={() => {
-          // Clear highlight will be handled by Workspace
+          workspaceApiRef.current?.clearHighlight?.();
         }}
       />
       <Toaster

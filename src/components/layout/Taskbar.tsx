@@ -864,7 +864,10 @@ const Taskbar: React.FC<TaskbarProps> = ({
                         </div>
                         {onClearSelection && (
                           <button
-                            onClick={onClearSelection}
+                            onClick={() => {
+                              console.log('Taskbar: X button clicked, calling onClearSelection');
+                              onClearSelection();
+                            }}
                             className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-md transition-colors group"
                             title="선택 취소"
                           >
