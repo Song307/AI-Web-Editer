@@ -463,6 +463,7 @@ body {
 
 .ProseMirror p {
   margin: 0.75rem 0;
+  color: var(--text-primary);
 }
 
 .ProseMirror blockquote {
@@ -481,6 +482,7 @@ body {
   margin: 1rem 0;
   overflow-x: auto;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: var(--text-primary);
 }
 
 .ProseMirror code {
@@ -489,6 +491,7 @@ body {
   border-radius: 3px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 0.875em;
+  color: var(--text-primary);
 }
 
 .editor-content-wrapper {
@@ -950,6 +953,7 @@ textarea:focus-visible {
 
 .ProseMirror li {
   margin: 0.25rem 0;
+  color: var(--text-primary);
 }
 
 .ProseMirror li p {

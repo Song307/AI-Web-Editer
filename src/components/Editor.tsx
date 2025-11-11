@@ -18,6 +18,7 @@ import { Plugin } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { marked } from 'marked';
 import { saveDocument, getDocument, deleteDocument, Document } from '../utils/db';
+import PDFViewer from './tools/PDFViewer';
 import { researchTopic, analyzeText, generatePersonaFeedback, answerQuestion, analyzeImage, analyzePDFPages } from '../utils/ai';
 import toast from 'react-hot-toast';
 import TurndownService from 'turndown';
@@ -122,9 +123,10 @@ interface EditorProps {
   activeTabId?: string;
   setTabs?: React.Dispatch<React.SetStateAction<any[]>>;
   setActiveTabId?: (id: string) => void;
+  file?: File;
 }
 
-const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, onApiReady, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId }, ref) => {
+const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, onApiReady, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId, file }, ref) => {
   const { id } = useParams<{ id: string }>();
   const documentId = id;
   const [title, setTitle] = useState('Untitled Document');
@@ -174,6 +176,9 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const [persona, setPersona] = useState('');
   const [activeToolbarMenu, setActiveToolbarMenu] = useState<'text' | 'insert' | 'ai'>('text');
   const [isToolbarVisible, setIsToolbarVisible] = useState(true);
+  const [isPdfFile, setIsPdfFile] = useState(false);
+  const [pdfData, setPdfData] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string>('');
 
   const editor = useEditor({
     extensions: [
@@ -625,6 +630,42 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       }
     }
   }, [isEditorReady, editor, documentId, onDirtyChange]);
+
+  // 파일 업로드 처리
+  useEffect(() => {
+    if (file && editor) {
+      const fileType = file.type;
+      const fileName = file.name;
+      
+      if (fileType === 'application/pdf') {
+        // PDF 파일 처리
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const pdfDataUrl = e.target?.result as string;
+          setPdfData(pdfDataUrl);
+          setIsPdfFile(true);
+          setUploadedFileName(fileName);
+          setTitle(fileName);
+        };
+        reader.readAsDataURL(file);
+      } else if (fileType.startsWith('image/')) {
+        // 이미지 파일 처리
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const imageData = e.target?.result as string;
+          const imageHtml = `<div class="image-container">
+            <img src="${imageData}" alt="${fileName}" style="max-width: 100%; height: auto;" />
+            <p>이미지 파일: ${fileName}</p>
+          </div>`;
+          editor.commands.setContent(imageHtml);
+          setTitle(fileName);
+          setIsPdfFile(false);
+          setPdfData(null);
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  }, [file, editor]);
 
   // 클릭 아웃사이드 처리 - 슬래시 메뉴 닫기
   useEffect(() => {
@@ -1741,6 +1782,21 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     return null;
   }
 
+  // PDF 파일인 경우 PDFViewer 표시
+  if (isPdfFile && pdfData) {
+    return (
+      <div className="h-full flex flex-col relative overflow-hidden">
+        <div className="flex-1 overflow-hidden">
+          <PDFViewer 
+            pdfData={pdfData} 
+            fileName={uploadedFileName}
+            toolbarVisible={true}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col relative overflow-hidden">
       {/* Tab header is rendered at Workspace level now (moved out of Editor) */}
@@ -1938,7 +1994,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         ) : (
           <EditorContent 
             editor={editor} 
-            className="h-full [&_.ProseMirror]:outline-none [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:text-sm sm:[&_.ProseMirror]:text-base [&_.ProseMirror]:max-w-none [&_.ProseMirror]:border-0 [&_.ProseMirror]:focus:outline-none [&_.ProseMirror]:p-6 [&_.ProseMirror]:min-h-full [&_.ProseMirror]:overflow-y-visible [&_.ProseMirror]:pb-32" 
+            className="h-full [&_.ProseMirror]:outline-none [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:text-sm sm:[&_.ProseMirror]:text-base [&_.ProseMirror]:max-w-none [&_.ProseMirror]:border-0 [&_.ProseMirror]:focus:outline-none [&_.ProseMirror]:p-6 [&_.ProseMirror]:min-h-full [&_.ProseMirror]:overflow-y-visible [&_.ProseMirror]:pb-32 [&_.ProseMirror]:text-gray-900 [&_.ProseMirror]:dark:text-gray-100" 
           />
         )}
         

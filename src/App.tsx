@@ -274,6 +274,18 @@ function AppContent() {
                 }
               />
               <Route
+                path="/workspace/upload"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                  />
+                }
+              />
+              <Route
                 path="/workspace/:id"
                 element={
                   <Workspace

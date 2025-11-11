@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { House, Plus, X, FileText, Image as ImageIcon, FileEarmarkPdf } from 'react-bootstrap-icons';
 import Editor from './Editor';
 import TabHeader from './Editor/TabHeader';
 import ImageViewer from './tools/ImageViewer';
 import PDFViewer from './tools/PDFViewer';
-import { getDocument } from '../utils/db';
+import { getDocument, getPdf, getImage } from '../utils/db';
 import toast from 'react-hot-toast';
 
 interface Tab {
@@ -14,6 +14,7 @@ interface Tab {
   type: 'document' | 'image' | 'pdf' | 'video';
   documentId?: string;
   content?: any;
+  file?: File;
 }
 
 interface WorkspaceProps {
@@ -32,6 +33,9 @@ const Workspace: React.FC<WorkspaceProps> = ({
   onRegisterApi,
 }) => {
   const editorRef = useRef<any>(null);
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   // taskList: canonical list of workspace tasks (persisted to cookie)
   const [taskList, setTaskList] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -44,6 +48,112 @@ const Workspace: React.FC<WorkspaceProps> = ({
     // API 등록은 이제 Editor의 onApiReady 콜백을 통해 이루어짐
     // cleanup은 필요 없음 - App에서 null을 받았을 때 특별한 처리 없음
   }, [activeTabId, onRegisterApi]);
+
+  // 업로드된 파일 처리
+  useEffect(() => {
+    const uploadedFile = localStorage.getItem('uploadedFile');
+    if (uploadedFile) {
+      try {
+        const fileData = JSON.parse(uploadedFile);
+        const fileType = fileData.type.startsWith('image/') ? 'image' : fileData.type === 'application/pdf' ? 'pdf' : 'document';
+        
+        // File 객체 재생성
+        const file = new File([dataURLToBlob(fileData.content)], fileData.name, { type: fileData.type });
+        
+        const newTab: Tab = {
+          id: `upload-${Date.now()}`,
+          title: fileData.name,
+          type: fileType,
+          file: file
+        };
+        
+        setTaskList(prev => [...prev, newTab]);
+        setActiveTabId(newTab.id);
+        
+        // localStorage 정리
+        localStorage.removeItem('uploadedFile');
+      } catch (error) {
+        console.error('업로드된 파일 처리 실패:', error);
+      }
+    }
+  }, []);
+
+  // Dashboard에서 전달된 파일 생성 요청 처리
+  useEffect(() => {
+    const loadFileFromState = async () => {
+      if (location.state?.createFileType) {
+        const fileType = location.state.createFileType as 'document' | 'image' | 'pdf';
+        const newTab: Tab = {
+          id: `new-${fileType}-${Date.now()}`,
+          title: `새 ${fileType === 'document' ? '문서' : fileType === 'image' ? '이미지' : 'PDF'}`,
+          type: fileType
+        };
+        setTaskList(prev => [...prev, newTab]);
+        setActiveTabId(newTab.id);
+        // state 초기화
+        navigate('/workspace', { replace: true, state: {} });
+      } else if (location.state?.imageId) {
+        // 이미지 파일 열기
+        const imageId = location.state.imageId;
+        try {
+          const imageFile = await getImage(imageId);
+          if (imageFile) {
+            // 이미지 파일을 File 객체로 변환
+            const file = new File([imageFile.data], imageFile.name, { type: imageFile.type });
+            const newTab: Tab = {
+              id: `image-${imageId}-${Date.now()}`,
+              title: imageFile.name,
+              type: 'image',
+              file: file
+            };
+            setTaskList(prev => [...prev, newTab]);
+            setActiveTabId(newTab.id);
+          }
+        } catch (error) {
+          console.error('이미지 파일 로드 실패:', error);
+          toast.error('이미지 파일을 불러올 수 없습니다.');
+        }
+        navigate('/workspace', { replace: true, state: {} });
+      } else if (location.state?.pdfId) {
+        // PDF 파일 열기
+        const pdfId = location.state.pdfId;
+        try {
+          const pdfFile = await getPdf(pdfId);
+          if (pdfFile) {
+            // PDF 파일을 File 객체로 변환
+            const file = new File([pdfFile.data], pdfFile.name, { type: pdfFile.type });
+            const newTab: Tab = {
+              id: `pdf-${pdfId}-${Date.now()}`,
+              title: pdfFile.name,
+              type: 'pdf',
+              file: file
+            };
+            setTaskList(prev => [...prev, newTab]);
+            setActiveTabId(newTab.id);
+          }
+        } catch (error) {
+          console.error('PDF 파일 로드 실패:', error);
+          toast.error('PDF 파일을 불러올 수 없습니다.');
+        }
+        navigate('/workspace', { replace: true, state: {} });
+      }
+    };
+
+    loadFileFromState();
+  }, [location.state, navigate]);
+
+  // dataURL을 Blob으로 변환하는 헬퍼 함수
+  const dataURLToBlob = (dataURL: string): Blob => {
+    const arr = dataURL.split(',');
+    const mime = arr[0].match(/:(.*?);/)?.[1] || '';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  };
   // Keep a ref to the latest taskList so unmount cleanup can log the current value
   type TaskListRefType = Tab[];
   const taskListRef = React.useRef<TaskListRefType | null>(null as any);
@@ -52,8 +162,6 @@ const Workspace: React.FC<WorkspaceProps> = ({
   }, [taskList]);
   // Guard set for documentIds currently being loaded to avoid duplicate load flows
   const loadingIdsRef = useRef<Set<string>>(new Set());
-  const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
 
   // Quick mount log to help debug blank screen when DevTools console is empty
   // Log on initial mount so we always get a trace when Workspace mounts
@@ -265,6 +373,23 @@ const Workspace: React.FC<WorkspaceProps> = ({
     setShowNewFileModal(false);
   };
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const fileType = file.type.startsWith('image/') ? 'image' : file.type === 'application/pdf' ? 'pdf' : 'document';
+    const newTab: Tab = {
+      id: `upload-${Date.now()}`,
+      title: file.name,
+      type: fileType,
+      file: file
+    };
+    setTaskList(prev => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+    setShowNewFileModal(false);
+    toast.success(`${file.name} 파일이 업로드되었습니다`);
+  };
+
   const getTabIcon = (type: string) => {
     switch (type) {
       case 'document':
@@ -422,9 +547,11 @@ const Workspace: React.FC<WorkspaceProps> = ({
               </div>
             )}
             {activeTab.type === 'pdf' && (
-              <div className="h-full flex items-center justify-center">
-                <p className="text-gray-500">PDF 뷰어 (준비 중)</p>
-              </div>
+              <PDFViewer
+                file={activeTab.file || null}
+                fileName={activeTab.title}
+                toolbarVisible={true}
+              />
             )}
           </div>
         ) : (
@@ -454,26 +581,19 @@ const Workspace: React.FC<WorkspaceProps> = ({
                   <div className="text-sm text-gray-500">마크다운 문서 생성</div>
                 </div>
               </button>
-              <button
-                onClick={() => toast('준비 중입니다')}
-                className="w-full p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left flex items-center gap-3 opacity-50 cursor-not-allowed"
-              >
-                <ImageIcon size={24} className="text-green-500" />
+              <label className="w-full p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left flex items-center gap-3 cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <FileEarmarkPdf size={24} className="text-green-500" />
                 <div>
-                  <div className="font-medium text-gray-900 dark:text-white">이미지</div>
-                  <div className="text-sm text-gray-500">이미지 파일 (준비 중)</div>
+                  <div className="font-medium text-gray-900 dark:text-white">파일 업로드</div>
+                  <div className="text-sm text-gray-500">이미지 또는 PDF 파일 업로드</div>
                 </div>
-              </button>
-              <button
-                onClick={() => toast('준비 중입니다')}
-                className="w-full p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left flex items-center gap-3 opacity-50 cursor-not-allowed"
-              >
-                <FileEarmarkPdf size={24} className="text-red-500" />
-                <div>
-                  <div className="font-medium text-gray-900 dark:text-white">PDF</div>
-                  <div className="text-sm text-gray-500">PDF 파일 (준비 중)</div>
-                </div>
-              </button>
+              </label>
             </div>
             <button
               onClick={() => setShowNewFileModal(false)}
