@@ -270,6 +270,8 @@ function AppContent() {
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
                     onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
                   />
                 }
               />
@@ -282,6 +284,8 @@ function AppContent() {
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
                     onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
                   />
                 }
               />
@@ -294,6 +298,8 @@ function AppContent() {
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
                     onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
                   />
                 }
               />
@@ -306,6 +312,8 @@ function AppContent() {
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
                     onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
                   />
                 }
               />
@@ -318,6 +326,8 @@ function AppContent() {
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
                     onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
                   />
                 }
               />

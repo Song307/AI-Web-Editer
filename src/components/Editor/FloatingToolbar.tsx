@@ -37,6 +37,9 @@ interface FloatingToolbarProps {
   onAIAnalyze: () => void;
   onAIPersonaFeedback: () => void;
   onAIAnswer: () => void;
+  // Taskbar position props
+  isRightSidebarOpen?: boolean;
+  rightSidebarWidth?: number;
 }
 
 const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
@@ -54,15 +57,22 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   onAIAnalyze,
   onAIPersonaFeedback,
   onAIAnswer,
+  isRightSidebarOpen = false,
+  rightSidebarWidth = 320,
 }) => {
-  if (isHiddenByWidth) return null;
+  if (isHiddenByWidth) {
+    return null;
+  }
+
+  // 테스크바가 열려있으면 툴바 위치 조정
+  const taskbarOffset = isRightSidebarOpen ? -(rightSidebarWidth / 2) : 0;
 
   return (
     <div 
       className="fixed bottom-12 z-40 max-w-[95vw] transition-all duration-300"
       style={{
         left: '50%',
-        transform: `translateX(calc(-50% + ${toolbarOffset}px))`
+        transform: `translateX(calc(-50% + ${toolbarOffset + taskbarOffset}px))`
       }}
     >
       {isVisible ? (

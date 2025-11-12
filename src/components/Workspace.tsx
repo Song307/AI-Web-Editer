@@ -23,6 +23,8 @@ interface WorkspaceProps {
   onSelectionRangeChange?: (range: { from: number; to: number } | null) => void;
   onOpenTaskbar?: () => void;
   onRegisterApi?: (api: { replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void } | null) => void;
+  isRightSidebarOpen?: boolean;
+  rightSidebarWidth?: number;
 }
 
 const Workspace: React.FC<WorkspaceProps> = ({
@@ -31,6 +33,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
   onSelectionRangeChange,
   onOpenTaskbar,
   onRegisterApi,
+  isRightSidebarOpen = false,
+  rightSidebarWidth = 320,
 }) => {
   const editorRef = useRef<any>(null);
   const navigate = useNavigate();
@@ -539,6 +543,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 initialContent={typeof activeTab.content === 'string' ? activeTab.content : (activeTab.content?.content ?? '')}
                 initialContentType={typeof activeTab.content === 'object' && activeTab.content?.contentType ? activeTab.content.contentType : undefined}
                 initialTitle={activeTab.title}
+                isRightSidebarOpen={isRightSidebarOpen}
+                rightSidebarWidth={rightSidebarWidth}
               />
             )}
             {activeTab.type === 'image' && (

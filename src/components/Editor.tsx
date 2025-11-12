@@ -47,24 +47,20 @@ const AISelectionHighlight = Extension.create({
           apply(tr, old) {
             // 트랜잭션에서 AI 선택 범위를 가져옴
             const aiSelection = tr.getMeta('aiSelection');
-            console.log('AISelectionHighlight: apply called, aiSelection =', aiSelection);
             if (aiSelection) {
               const { from, to } = aiSelection;
               if (from !== to) {
                 const decoration = Decoration.inline(from, to, {
                   class: 'ai-selection-highlight',
                 });
-                console.log('AISelectionHighlight: creating decoration for', from, to);
                 return DecorationSet.create(tr.doc, [decoration]);
               }
             }
             // aiSelection이 null이면 하이라이트 제거
             if (aiSelection === null) {
-              console.log('AISelectionHighlight: removing decoration (aiSelection is null)');
               return DecorationSet.empty;
             }
             // 그 외의 경우 기존 decoration 유지
-            console.log('AISelectionHighlight: keeping old decorations');
             return old;
           },
         },
@@ -124,9 +120,12 @@ interface EditorProps {
   setTabs?: React.Dispatch<React.SetStateAction<any[]>>;
   setActiveTabId?: (id: string) => void;
   file?: File;
+  // Taskbar position props for dynamic toolbar positioning
+  isRightSidebarOpen?: boolean;
+  rightSidebarWidth?: number;
 }
 
-const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, onApiReady, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId, file }, ref) => {
+const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, onApiReady, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId, file, isRightSidebarOpen = false, rightSidebarWidth = 320 }, ref) => {
   const { id } = useParams<{ id: string }>();
   const documentId = id;
   const [title, setTitle] = useState('Untitled Document');
@@ -175,7 +174,16 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [persona, setPersona] = useState('');
   const [activeToolbarMenu, setActiveToolbarMenu] = useState<'text' | 'insert' | 'ai'>('text');
-  const [isToolbarVisible, setIsToolbarVisible] = useState(true);
+  const [isToolbarVisible, setIsToolbarVisible] = useState(() => {
+    // 로컬 스토리지에서 툴바 표시 상태 불러오기, 기본값은 true
+    const saved = localStorage.getItem('isToolbarVisible');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  // 툴바 표시 상태를 로컬 스토리지에 저장
+  useEffect(() => {
+    localStorage.setItem('isToolbarVisible', JSON.stringify(isToolbarVisible));
+  }, [isToolbarVisible]);
   const [isPdfFile, setIsPdfFile] = useState(false);
   const [pdfData, setPdfData] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
@@ -428,6 +436,9 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   // 툴바 위치 계산 - 검색 사이드바와 문서 목록 사이드바 상태에 따라 조정
   useEffect(() => {
     const updateToolbarPosition = () => {
+      // 에디터가 준비되지 않았으면 실행하지 않음
+      if (!isEditorReady) return;
+
       // 에디터 컨테이너의 실제 너비 확인
       const editorContainer = document.getElementById('editor-container');
 
@@ -453,11 +464,13 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       // 에디터 컨테이너의 실제 너비로 판단 (더 정확함)
       if (editorContainer) {
         const containerWidth = editorContainer.getBoundingClientRect().width;
-        setIsToolbarHiddenByWidth(containerWidth < 800);
+        const shouldHide = containerWidth < 500;
+        setIsToolbarHiddenByWidth(shouldHide);
       } else {
         // fallback: availableWidth에서 좌우 마진 48px 제외
         const editorContentWidth = availableWidth - 48;
-        setIsToolbarHiddenByWidth(editorContentWidth < 800);
+        const shouldHide = editorContentWidth < 500;
+        setIsToolbarHiddenByWidth(shouldHide);
       }
     };
 
@@ -473,7 +486,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       clearTimeout(timeoutId);
       window.removeEventListener('resize', updateToolbarPosition);
     };
-  }, [isSearchOpen, isDocumentListOpen]);
+  }, [isSearchOpen, isDocumentListOpen, isEditorReady]);
 
   // 목차 실시간 업데이트
   useEffect(() => {
@@ -1980,7 +1993,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         {/* 에디터 영역 */}
         <div 
           id="editor-container" 
-          className="flex-1 mx-6 mt-4 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-opacity-30 focus-within:ring-blue-300 dark:focus-within:ring-blue-700 focus-within:border-blue-300 dark:focus-within:border-blue-500 mb-6 transition-all duration-200 min-h-0"
+          className="flex-1 mx-6 mt-4 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg flex flex-col focus-within:ring-1 focus-within:ring-opacity-30 focus-within:ring-blue-300 dark:focus-within:ring-blue-700 focus-within:border-blue-300 dark:focus-within:border-blue-500 mb-6 transition-all duration-200 min-h-0 relative"
           style={{'--tw-ring-color': 'rgba(99, 102, 241, 0.3)'} as React.CSSProperties}
         >
         
@@ -2159,28 +2172,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         onCancel={handlePersonaCancel}
       />
       
-      {/* 플로팅 툴바 - 하단 중앙 고정 (Figma 스타일) - 메뉴 기반 */}
-      <FloatingToolbar
-        editor={editor}
-        isVisible={isToolbarVisible}
-        isHiddenByWidth={isToolbarHiddenByWidth}
-        activeMenu={activeToolbarMenu}
-        toolbarOffset={toolbarOffset}
-        isAiLoading={isAiLoading}
-        onMenuChange={setActiveToolbarMenu}
-        onToggleVisibility={setIsToolbarVisible}
-        onLinkInsert={handleLinkInsert}
-        onImageInsert={() => {
-          setImageUrl('');
-          setShowImageUrlModal(true);
-        }}
-        onAIResearch={handleAIResearch}
-        onAIAnalyze={handleAIAnalyze}
-        onAIPersonaFeedback={handleAIPersonaFeedback}
-        onAIAnswer={handleAIAnswer}
-      />
-      
-      {/* AI 요청 버튼 - 화면 우측 하단 고정 (플로팅 툴바와 같은 높이) */}
+      {/* AI 요청 버튼 - 에디터 텍스트박스 우측 하단 고정 */}
       <button
         onClick={() => {
           // AI 버튼 클릭 시 선택된 텍스트를 캡처해서 Taskbar에 전달
@@ -2208,11 +2200,34 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
           }
           onOpenTaskbar?.();
         }}
-        className="fixed bottom-12 right-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full p-4 shadow-lg transition-all hover:scale-110 hover:shadow-xl z-50"
+        className="absolute bottom-12 right-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full p-4 shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl z-50"
         title="AI 어시스턴트"
       >
         <Robot size={24} />
       </button>
+      
+      {/* 플로팅 툴바 - 하단 중앙 고정 (Figma 스타일) - 메뉴 기반 */}
+      <FloatingToolbar
+        editor={editor}
+        isVisible={isToolbarVisible}
+        isHiddenByWidth={isToolbarHiddenByWidth}
+        activeMenu={activeToolbarMenu}
+        toolbarOffset={toolbarOffset}
+        isAiLoading={isAiLoading}
+        onMenuChange={setActiveToolbarMenu}
+        onToggleVisibility={setIsToolbarVisible}
+        onLinkInsert={handleLinkInsert}
+        onImageInsert={() => {
+          setImageUrl('');
+          setShowImageUrlModal(true);
+        }}
+        onAIResearch={handleAIResearch}
+        onAIAnalyze={handleAIAnalyze}
+        onAIPersonaFeedback={handleAIPersonaFeedback}
+        onAIAnswer={handleAIAnswer}
+        isRightSidebarOpen={isRightSidebarOpen}
+        rightSidebarWidth={rightSidebarWidth}
+      />
     </div>
   );
 });

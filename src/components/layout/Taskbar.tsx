@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Paperclip, X, Stars, Trash, Clipboard, ArrowsFullscreen, FileEarmarkPdf, Image as ImageIcon, Wrench, Chat, Code, Translate, FileText, Robot } from 'react-bootstrap-icons';
 import ReactMarkdown from 'react-markdown';
 import toast from 'react-hot-toast';
@@ -22,6 +22,16 @@ interface UploadedFile {
   data: string;
   size: number;
   pageCount?: number;
+}
+
+interface ClipboardItem {
+  id: string;
+  content: string;
+  type: 'text' | 'html' | 'image' | 'pdf';
+  timestamp: Date;
+  title?: string;
+  fileName?: string;
+  fileSize?: number;
 }
 
 interface TaskbarProps {
@@ -57,11 +67,16 @@ const Taskbar: React.FC<TaskbarProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'clipboard' | 'aiAssistant'>('aiAssistant');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([]);
+  const [selectedClipboardItem, setSelectedClipboardItem] = useState<ClipboardItem | null>(null);
+  const [editingItem, setEditingItem] = useState<ClipboardItem | null>(null);
+  const [editingContent, setEditingContent] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isClipboardSelected, setIsClipboardSelected] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(() => {
     const saved = localStorage.getItem('selectedTool');
     return saved ? saved : null;
@@ -75,11 +90,26 @@ const Taskbar: React.FC<TaskbarProps> = ({
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
+  const clipboardTabRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // 클립보드 선택 해제 (클립보드 영역 외부 클릭 시)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (clipboardTabRef.current && !clipboardTabRef.current.contains(event.target as Node)) {
+        setIsClipboardSelected(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Ctrl+Z to undo last applied suggestion
   useEffect(() => {
@@ -166,6 +196,321 @@ const Taskbar: React.FC<TaskbarProps> = ({
         return '';
     }
   };
+
+  // 클립보드 관련 함수들
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('클립보드에 복사되었습니다');
+    } catch (error) {
+      console.error('클립보드 복사 실패:', error);
+      toast.error('클립보드 복사에 실패했습니다');
+    }
+  };
+
+  // 메뉴바 클립보드에서 데이터 불러오기
+  const loadMenubarClipboardItems = () => {
+    try {
+      const stored = localStorage.getItem('clipboardItems');
+      if (stored) {
+        const items = JSON.parse(stored).map((item: any) => ({
+          id: item.id,
+          content: item.content,
+          type: item.type,
+          timestamp: new Date(item.timestamp),
+          fileName: item.fileName,
+          fileSize: item.fileSize,
+          title: item.type === 'text' ? (item.content.length > 50 ? item.content.substring(0, 50) + '...' : item.content) :
+                item.type === 'image' ? (item.fileName || '이미지') :
+                item.type === 'pdf' ? (item.fileName || 'PDF 문서') :
+                item.content.substring(0, 50) + '...'
+        }));
+        // 메뉴바 클립보드의 최신 상태로 완전히 동기화
+        setClipboardItems(items);
+      } else {
+        setClipboardItems([]);
+      }
+    } catch (error) {
+      console.error('메뉴바 클립보드 데이터 로드 실패:', error);
+      toast.error('클립보드 데이터를 불러올 수 없습니다');
+    }
+  };
+
+  // 메뉴바 클립보드에 항목 저장
+  const saveToMenubarClipboard = (item: ClipboardItem) => {
+    try {
+      const stored = localStorage.getItem('clipboardItems');
+      let items = [];
+      if (stored) {
+        items = JSON.parse(stored);
+      }
+      // 메뉴바 클립보드 형식으로 변환
+      const menubarItem = {
+        id: item.id,
+        type: item.type,
+        content: item.content,
+        timestamp: item.timestamp.toISOString(),
+        fileName: item.fileName,
+        fileSize: item.fileSize
+      };
+      items.unshift(menubarItem); // 맨 앞에 추가
+      // 최대 50개 유지 (메뉴바 클립보드의 제한)
+      if (items.length > 50) {
+        items = items.slice(0, 50);
+      }
+      localStorage.setItem('clipboardItems', JSON.stringify(items));
+      // 클립보드 변경 이벤트 발생
+      window.dispatchEvent(new CustomEvent('clipboardChanged'));
+    } catch (error) {
+      console.error('메뉴바 클립보드 저장 실패:', error);
+    }
+  };
+
+  // 클립보드 데이터 동기화를 위한 이벤트 리스너
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'clipboardItems') {
+        loadMenubarClipboardItems();
+      }
+    };
+
+    const handleClipboardChange = () => {
+      loadMenubarClipboardItems();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('clipboardChanged', handleClipboardChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('clipboardChanged', handleClipboardChange);
+    };
+  }, []);
+
+  const pasteFromClipboard = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        const newItem: ClipboardItem = {
+          id: Date.now().toString(),
+          content: text,
+          type: 'text',
+          timestamp: new Date(),
+          title: text.length > 50 ? text.substring(0, 50) + '...' : text
+        };
+        setClipboardItems(prev => [newItem, ...prev.slice(0, 9)]); // 최대 10개 유지
+        saveToMenubarClipboard(newItem); // 메뉴바 클립보드에도 저장
+        toast.success('클립보드 내용이 추가되었습니다');
+      } else {
+        toast('클립보드에 텍스트가 없습니다');
+      }
+    } catch (error) {
+      console.error('클립보드 붙여넣기 실패:', error);
+      toast.error('클립보드 내용을 가져올 수 없습니다');
+    }
+  }, []);
+
+  const handleClipboardHeaderClick = (e: React.MouseEvent) => {
+    console.log('Clipboard header clicked, current state:', isClipboardSelected);
+    e.stopPropagation();
+    setIsClipboardSelected(!isClipboardSelected);
+    console.log('New clipboard state:', !isClipboardSelected);
+  };
+
+  // 메뉴바 클립보드에서 항목 삭제
+  const deleteFromMenubarClipboard = (id: string) => {
+    try {
+      const stored = localStorage.getItem('clipboardItems');
+      if (stored) {
+        let items = JSON.parse(stored);
+        items = items.filter((item: any) => item.id !== id);
+        localStorage.setItem('clipboardItems', JSON.stringify(items));
+        // 클립보드 변경 이벤트 발생
+        window.dispatchEvent(new CustomEvent('clipboardChanged'));
+      }
+    } catch (error) {
+      console.error('메뉴바 클립보드 삭제 실패:', error);
+    }
+  };
+
+  const deleteClipboardItem = (id: string) => {
+    deleteFromMenubarClipboard(id); // 메뉴바 클립보드에서 삭제 (이벤트 리스너를 통해 로컬 상태도 업데이트됨)
+    toast.success('클립보드 항목이 삭제되었습니다');
+  };
+
+  // 텍스트 항목 편집 시작
+  const startEditingItem = (item: ClipboardItem) => {
+    if (item.type === 'text') {
+      setEditingItem(item);
+      setEditingContent(item.content);
+    }
+  };
+
+  // 텍스트 항목 편집 저장
+  const saveEditingItem = () => {
+    if (editingItem) {
+      const newContent = editingContent.trim();
+      const updatedItem = {
+        ...editingItem,
+        content: newContent,
+        timestamp: new Date(),
+        title: newContent.length > 50 ? newContent.substring(0, 50) + '...' : newContent
+      };
+      
+      // 로컬 상태 업데이트
+      setClipboardItems(prev => prev.map(item => 
+        item.id === editingItem.id ? updatedItem : item
+      ));
+      
+      // 메뉴바 클립보드 업데이트 (전체 항목 교체)
+      try {
+        const stored = localStorage.getItem('clipboardItems');
+        let items = [];
+        if (stored) {
+          items = JSON.parse(stored);
+        }
+        
+        // 기존 항목을 찾아서 업데이트
+        const existingIndex = items.findIndex((item: any) => item.id === editingItem.id);
+        if (existingIndex !== -1) {
+          // 메뉴바 클립보드 형식으로 변환
+          const menubarItem = {
+            id: updatedItem.id,
+            type: updatedItem.type,
+            content: updatedItem.content,
+            timestamp: updatedItem.timestamp.toISOString(),
+            fileName: updatedItem.fileName,
+            fileSize: updatedItem.fileSize
+          };
+          items[existingIndex] = menubarItem;
+        }
+        
+        localStorage.setItem('clipboardItems', JSON.stringify(items));
+        // 클립보드 변경 이벤트 발생
+        window.dispatchEvent(new CustomEvent('clipboardChanged'));
+      } catch (error) {
+        console.error('메뉴바 클립보드 업데이트 실패:', error);
+      }
+      
+      setEditingItem(null);
+      setEditingContent('');
+    }
+  };
+
+  const handlePasteSelectedItem = useCallback(async () => {
+    if (!selectedClipboardItem) return;
+
+    try {
+      // 시스템 클립보드에 복사
+      await navigator.clipboard.writeText(selectedClipboardItem.content);
+
+      // 클립보드 탭에 새로운 항목으로 추가
+      const newItem: ClipboardItem = {
+        id: Date.now().toString(),
+        content: selectedClipboardItem.content,
+        type: selectedClipboardItem.type,
+        timestamp: new Date(),
+        title: selectedClipboardItem.title,
+        fileName: selectedClipboardItem.fileName,
+        fileSize: selectedClipboardItem.fileSize
+      };
+      setClipboardItems(prev => [newItem, ...prev.slice(0, 9)]); // 최대 10개 유지
+      saveToMenubarClipboard(newItem); // 메뉴바 클립보드에도 저장
+
+      toast.success('클립보드에 복사되고 항목이 추가되었습니다');
+    } catch (error) {
+      console.error('클립보드 복사 실패:', error);
+      toast.error('클립보드 복사에 실패했습니다');
+    }
+  }, [selectedClipboardItem]);
+
+  // 클립보드 탭이 활성화될 때 메뉴바 클립보드 데이터 로드
+  useEffect(() => {
+    if (activeTab === 'clipboard') {
+      loadMenubarClipboardItems();
+    } else {
+      // 클립보드 탭에서 벗어나면 선택 해제
+      setSelectedClipboardItem(null);
+    }
+  }, [activeTab]);
+
+  // localStorage 변경 감지 (다른 컴포넌트에서의 클립보드 변경 반영)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'clipboardItems' && activeTab === 'clipboard') {
+        loadMenubarClipboardItems();
+      }
+    };
+
+    const handleCustomClipboardChange = () => {
+      if (activeTab === 'clipboard') {
+        loadMenubarClipboardItems();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('clipboardItemsChanged', handleCustomClipboardChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('clipboardItemsChanged', handleCustomClipboardChange);
+    };
+  }, [activeTab]);
+
+  // 클립보드 탭에서 키보드 이벤트 처리
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+V 또는 Cmd+V
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        // 현재 포커스가 에디터에 있는지 확인
+        const activeElement = document.activeElement;
+        const isEditorFocused = activeElement && (
+          activeElement.classList.contains('ProseMirror') ||
+          activeElement.closest('.editor-container') ||
+          activeElement.closest('[data-editor]') ||
+          activeElement.tagName === 'TEXTAREA' ||
+          activeElement.tagName === 'INPUT' ||
+          (activeElement as HTMLElement).contentEditable === 'true'
+        );
+
+        console.log('Ctrl+V pressed, activeTab:', activeTab, 'isClipboardSelected:', isClipboardSelected, 'isEditorFocused:', isEditorFocused);
+
+        if (activeTab === 'clipboard' && isClipboardSelected && !isEditorFocused) {
+          console.log('Pasting to clipboard');
+          e.preventDefault();
+          if (selectedClipboardItem) {
+            handlePasteSelectedItem();
+          } else {
+            // 클립보드 탭에서 선택된 상태에서만 시스템 클립보드에서 붙여넣기
+            pasteFromClipboard();
+          }
+        } else if (activeTab === 'clipboard' && !isClipboardSelected && !isEditorFocused) {
+          // 클립보드 탭이지만 선택되지 않은 상태에서는 붙여넣기 막기 (에디터가 포커스가 아닐 때만)
+          console.log('Clipboard not selected, preventing paste');
+          e.preventDefault();
+        } else if (activeTab !== 'clipboard' && isClipboardSelected) {
+          // 다른 탭이지만 클립보드가 선택된 상태에서는 클립보드에 붙여넣기
+          console.log('Clipboard selected in other tab, pasting to clipboard');
+          e.preventDefault();
+          pasteFromClipboard();
+        } else {
+          console.log('Allowing default paste behavior');
+        }
+        // 에디터에 포커스가 있거나 클립보드가 선택되지 않았거나 다른 탭에서는 기본 붙여넣기 동작 허용
+      }
+      // ESC 키로 선택 해제
+      else if (e.key === 'Escape') {
+        setSelectedClipboardItem(null);
+        setIsClipboardSelected(false);
+        toast('선택이 해제되었습니다');
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeTab, selectedClipboardItem, pasteFromClipboard, handlePasteSelectedItem, isClipboardSelected]);
 
   // Handle sending a message
   const handleSend = async () => {
@@ -527,14 +872,147 @@ const Taskbar: React.FC<TaskbarProps> = ({
         {/* 탭 내용 */}
         <div className="flex-1 overflow-y-auto">
           {activeTab === 'clipboard' && (
-            <div className="space-y-3">
-              <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  클립보드
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  클립보드 내용이 여기에 표시됩니다.
+            <div 
+              ref={clipboardTabRef}
+              className="flex flex-col h-full bg-white dark:bg-gray-900"
+            >
+              {/* 클립보드 헤더 */}
+              <div 
+                className="p-4 border-b border-gray-200 dark:border-gray-700 cursor-pointer"
+                onClick={handleClipboardHeaderClick}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    클립보드
+                    {isClipboardSelected && (
+                      <span className="text-xs bg-blue-500 text-white px-2 py-1 rounded-full">
+                        선택됨
+                      </span>
+                    )}
+                  </h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        pasteFromClipboard();
+                      }}
+                      className="px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
+                      title="클립보드에서 붙여넣기"
+                    >
+                      붙여넣기
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-0">
+                  아이템 영역을 클릭하여 클립보드를 선택하세요 · 선택된 상태에서 <kbd className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Ctrl+V</kbd>로 붙여넣기
                 </p>
+              </div>
+
+              {/* 클립보드 항목들 */}
+              <div 
+                className={`flex-1 overflow-y-auto p-4 transition-all duration-200 cursor-pointer ${
+                  isClipboardSelected 
+                    ? 'ring-2 ring-blue-500 ring-inset' 
+                    : ''
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClipboardHeaderClick(e);
+                }}
+              >
+                {clipboardItems.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Clipboard className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      클립보드 항목이 없습니다
+                    </p>
+                    <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">
+                      각 항목의 복사 버튼을 클릭하여 클립보드에 복사할 수 있습니다
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {clipboardItems.map((item) => {
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => item.type === 'text' ? startEditingItem(item) : setSelectedClipboardItem(item)}
+                          className={`p-3 border rounded-lg transition-colors cursor-pointer ${
+                            selectedClipboardItem?.id === item.id
+                              ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600 ring-2 ring-blue-200 dark:ring-blue-800'
+                              : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-600'
+                          }`}
+                        >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            {item.type === 'image' ? (
+                              <div className="space-y-2">
+                                <img
+                                  src={item.content}
+                                  alt={item.fileName || '클립보드 이미지'}
+                                  className="max-w-full h-20 object-cover rounded border border-gray-200 dark:border-gray-600"
+                                />
+                                {item.fileName && (
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    {item.fileName}
+                                  </p>
+                                )}
+                              </div>
+                            ) : item.type === 'pdf' ? (
+                              <div className="flex items-center space-x-2">
+                                <FileEarmarkPdf size={20} className="text-red-500" />
+                                <div>
+                                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                                    {item.fileName || 'PDF 문서'}
+                                  </p>
+                                  {item.fileSize && (
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {(item.fileSize / 1024 / 1024).toFixed(2)} MB
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : editingItem?.id === item.id ? (
+                              <textarea
+                                value={editingContent}
+                                onChange={(e) => setEditingContent(e.target.value)}
+                                onBlur={saveEditingItem}
+                                className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                rows={4}
+                                placeholder="텍스트를 입력하세요..."
+                                autoFocus
+                              />
+                            ) : (
+                              <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap">
+                                {item.content}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex gap-1 ml-2">
+                            <button
+                              onClick={() => copyToClipboard(item.content)}
+                              className="p-1 text-green-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors opacity-60 hover:opacity-100"
+                              title="복사하기"
+                            >
+                              <Clipboard size={14} />
+                            </button>
+                            <button
+                              onClick={() => deleteClipboardItem(item.id)}
+                              className="p-1 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors opacity-60 hover:opacity-100"
+                              title="삭제하기"
+                            >
+                              <Trash size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {item.timestamp.toLocaleString('ko-KR')}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}
