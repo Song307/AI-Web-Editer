@@ -290,6 +290,46 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
                   </button>
                   <span className="tooltip-text">구분선</span>
                 </div>
+                {/* 표 삽입 */}
+                <div className="tooltip-container">
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent('openTableInsertModal'))}
+                    className="p-2 rounded-lg cursor-pointer text-sm font-medium transition-all text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <span style={{fontWeight:'bold'}}>표</span>
+                  </button>
+                  <span className="tooltip-text">표 삽입</span>
+                </div>
+                {/* 수식 삽입 (모달) */}
+                <div className="tooltip-container">
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent('openEquationModal'))}
+                    className="p-2 rounded-lg cursor-pointer text-sm font-medium transition-all text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <span style={{fontWeight:'bold'}}>$</span>
+                  </button>
+                  <span className="tooltip-text">수식 입력</span>
+                </div>
+                {/* 머메이드 다이어그램 삽입 */}
+                <div className="tooltip-container">
+                  <button
+                    onClick={() => editor.chain().focus().insertContent('<pre><code class="language-mermaid">graph TD;\nA-->B;\nA-->C;</code></pre>')}
+                    className="p-2 rounded-lg cursor-pointer text-sm font-medium transition-all text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <span style={{fontWeight:'bold'}}>Mermaid</span>
+                  </button>
+                  <span className="tooltip-text">다이어그램</span>
+                </div>
+                {/* 동영상(iframe) 삽입 */}
+                <div className="tooltip-container">
+                  <button
+                    onClick={() => editor.chain().focus().insertContent('<iframe width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ" frameborder="0" allowfullscreen></iframe>')}
+                    className="p-2 rounded-lg cursor-pointer text-sm font-medium transition-all text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <span style={{fontWeight:'bold'}}>🎬</span>
+                  </button>
+                  <span className="tooltip-text">동영상</span>
+                </div>
               </>
             )}
             

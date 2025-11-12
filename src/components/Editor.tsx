@@ -17,6 +17,14 @@ import { Extension } from '@tiptap/core';
 import { Plugin } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { marked } from 'marked';
+import mermaid from 'mermaid';
+import { InlineMath, BlockMath } from 'react-katex';
+import Modal from 'react-modal';
+import { Table as TableExtension } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { saveDocument, getDocument, deleteDocument, Document } from '../utils/db';
 import PDFViewer from './tools/PDFViewer';
 import { researchTopic, analyzeText, generatePersonaFeedback, answerQuestion, analyzeImage, analyzePDFPages } from '../utils/ai';
@@ -74,27 +82,28 @@ const AISelectionHighlight = Extension.create({
   },
 });
 
-// 마크다운 붙여넣기 확장
+// 마크다운 붙여넣기 및 렌더링 확장 (표, 수식, 머메이드, 동영상 지원)
 const MarkdownPasteExtension = Extension.create({
   name: 'markdownPaste',
-
   addProseMirrorPlugins() {
     return [
       new Plugin({
         props: {
-          // 텍스트를 붙여넣을 때 실행되는 함수
           transformPastedText(text: string) {
-            // 붙여넣은 텍스트가 마크다운을 포함하는지 확인
-            const hasMarkdown = /\*\*.*\*\*|_.*_|`.*`|\[.*\]\(.*\)|\n\n/.test(text);
-            
-            if (hasMarkdown) {
-              // 마크다운이 포함되어 있다면 HTML로 변환
-              const html = marked.parse(text) as string;
-              return html;
-            }
-            
-            // 마크다운이 없으면 원본 텍스트 반환
-            return text;
+            // 표, 수식, 머메이드, 동영상 등 확장 마크다운 파싱
+            let html = marked.parse(text) as string;
+
+            // 수식: $...$ (인라인), $$...$$ (블록)
+            html = html.replace(/\$\$(.+?)\$\$/gs, (m, eq) => `<div class="math-block">${eq}</div>`);
+            html = html.replace(/\$(.+?)\$/g, (m, eq) => `<span class="math-inline">${eq}</span>`);
+
+            // Mermaid: ```mermaid ... ```
+            html = html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g, (m, code) => `<div class="mermaid-block">${code}</div>`);
+
+            // 동영상: iframe 태그 허용
+            // 이미 marked가 iframe을 HTML로 변환하므로 별도 처리 불필요
+
+            return html;
           },
         },
       }),
@@ -171,6 +180,17 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const [imageUrl, setImageUrl] = useState('');
   const [showLinkUrlModal, setShowLinkUrlModal] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+
+  // Table hover controls (add row/column) overlay
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
+  const [showTableControls, setShowTableControls] = useState(false);
+  const [tableControlPos, setTableControlPos] = useState<{
+    rightLeft: number;
+    rightTop: number;
+    bottomLeft: number;
+    bottomTop: number;
+  } | null>(null);
+  const [hoveredCellRect, setHoveredCellRect] = useState<DOMRect | null>(null);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [persona, setPersona] = useState('');
   const [activeToolbarMenu, setActiveToolbarMenu] = useState<'text' | 'insert' | 'ai'>('text');
@@ -187,66 +207,321 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const [isPdfFile, setIsPdfFile] = useState(false);
   const [pdfData, setPdfData] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const [isEquationModalOpen, setIsEquationModalOpen] = useState(false);
+  const [isTableInsertModalOpen, setIsTableInsertModalOpen] = useState(false);
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: false, // StarterKit의 기본 heading을 비활성화
-        bulletList: false, // StarterKit의 기본 bulletList 비활성화
-        orderedList: false, // StarterKit의 기본 orderedList 비활성화
-        listItem: false, // StarterKit의 기본 listItem 비활성화
+        heading: false,
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
       }),
-      Heading.configure({
-        levels: [1, 2, 3],
-      }),
-      BulletList.configure({
-        keepMarks: true,
-        keepAttributes: false,
-      }),
-      OrderedList.configure({
-        keepMarks: true,
-        keepAttributes: false,
-      }),
+      Heading.configure({ levels: [1, 2, 3] }),
+      BulletList.configure({ keepMarks: true, keepAttributes: false }),
+      OrderedList.configure({ keepMarks: true, keepAttributes: false }),
       TaskList,
-      TaskItem.configure({
-        nested: true,
-      }),
-      Image.configure({
-        inline: true,
-        allowBase64: true,
-      }),
-      Link.configure({
-        openOnClick: false,
+      TaskItem.configure({ nested: true }),
+      Image.configure({ inline: true, allowBase64: true }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'link' } }),
+      ListItem,
+      Placeholder.configure({ placeholder: '내용을 입력하세요... ("/"를 눌러 블럭 추가)' }),
+      MarkdownPasteExtension,
+      AISelectionHighlight,
+      // 표 확장: @tiptap/extension-table
+      TableExtension.configure({
+        resizable: true,
         HTMLAttributes: {
-          class: 'link',
+          // table-fixed + w-full: make table occupy the full content width
+          // border on table + borders on cells to ensure a clear outline and grid
+          class: 'w-full table-fixed border-collapse border border-gray-200 dark:border-gray-700 my-4 rounded-md overflow-hidden',
         },
       }),
-      ListItem,
-      Placeholder.configure({
-        placeholder: '내용을 입력하세요... ("/"를 눌러 블럭 추가)',
+      TableRow.configure({
+        HTMLAttributes: {
+          class: 'border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors',
+        },
       }),
-      MarkdownPasteExtension, // 마크다운 붙여넣기 확장 추가
-      AISelectionHighlight, // AI 선택 하이라이트 확장 추가
+      TableHeader.configure({
+        HTMLAttributes: {
+          // give header cells full borders so outer outline is visible
+          class: 'px-4 py-2 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 font-medium',
+        },
+      }),
+      TableCell.configure({
+        HTMLAttributes: {
+          // ensure each cell has a full bor  der so vertical and horizontal lines show
+          class: 'px-4 py-2 border border-gray-200 dark:border-gray-700',
+        },
+      }),
+      // 수식/머메이드/동영상은 렌더링에서 처리
     ],
     content: '<p></p>',
-    onUpdate: ({ editor }) => {
-      onDirtyChange?.(true);
-
-      // 슬래시 메뉴가 열려있을 때는 닫기 로직을 실행하지 않음
-      // 메뉴는 키보드 이벤트에서만 제어
-    },
-    onSelectionUpdate: ({ editor }) => {
-      // 선택 영역 변경 시 별도 처리 없음 - AI 버튼 클릭 시에만 하이라이트
-    },
-    onCreate: ({ editor }) => {
-      setIsEditorReady(true);
-      // 이벤트 리스너는 useEffect에서 추가
-    },
-    onDestroy: () => {
-      // 에디터가 파괴될 때 정리 작업
-      // onCreate에서 추가한 이벤트 리스너는 자동으로 정리됨
-    },
+    onUpdate: ({ editor }) => { onDirtyChange?.(true); },
+    onSelectionUpdate: ({ editor }) => {},
+    onCreate: ({ editor }) => { setIsEditorReady(true); },
+    onDestroy: () => {},
   });
+// 마크다운 렌더링 컴포넌트 (표, 수식, 머메이드, 동영상, 코드)
+const MarkdownRenderer = ({ html }: { html: string }) => {
+  // 수식 렌더링
+  const renderMath = (node: Element) => {
+    if (node.classList.contains('math-block')) {
+      return <BlockMath math={node.textContent || ''} />;
+    }
+    if (node.classList.contains('math-inline')) {
+      return <InlineMath math={node.textContent || ''} />;
+    }
+    return null;
+  };
+
+  // Mermaid 렌더링 (노션 스타일: 코드/렌더링 토글)
+  const MermaidRenderer = ({ code }: { code: string }) => {
+    const [showCode, setShowCode] = useState(false);
+    const [svg, setSvg] = useState('');
+    useEffect(() => {
+      if (!showCode) {
+        try {
+          mermaid.render('mermaid-svg-' + Math.random(), code).then((result) => {
+            setSvg(result.svg);
+          });
+        } catch (error) {
+          console.error('Mermaid rendering error:', error);
+          setSvg('<div class="text-red-500">다이어그램 렌더링 오류</div>');
+        }
+      }
+    }, [code, showCode]);
+    return (
+      <div className="mermaid-block">
+        <div className="flex gap-2 mb-2">
+          <button onClick={() => setShowCode(false)} className={!showCode ? 'font-bold' : ''}>다이어그램</button>
+          <button onClick={() => setShowCode(true)} className={showCode ? 'font-bold' : ''}>코드</button>
+        </div>
+        {showCode ? (
+          <SyntaxHighlighter language="mermaid">{code}</SyntaxHighlighter>
+        ) : (
+          <div dangerouslySetInnerHTML={{ __html: svg }} />
+        )}
+      </div>
+    );
+  };
+
+  // 동영상 렌더링
+  const renderIframe = (node: Element) => {
+    if (node.tagName === 'IFRAME') {
+      return (
+        <iframe
+          src={node.getAttribute('src') || ''}
+          width={node.getAttribute('width') || '560'}
+          height={node.getAttribute('height') || '315'}
+          frameBorder={node.getAttribute('frameborder') || '0'}
+          allowFullScreen
+          title="Embedded content"
+        />
+      );
+    }
+    return null;
+  };
+
+  // 표 렌더링 (Notion 스타일)
+  const renderTable = (node: Element) => {
+    if (node.tagName === 'TABLE') {
+      const rows = Array.from(node.children).filter(child => child.tagName === 'TR');
+      if (rows.length === 0) return null;
+
+      const headerRow = rows[0];
+      const bodyRows = rows.slice(1);
+
+      return (
+        <div className="my-8 not-prose">
+          {/* wrapper: use group so hover can reveal controls */}
+          <div className="overflow-visible rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 shadow-sm relative group notion-table-wrapper">
+            <table className="w-full border-collapse notion-table">
+              {headerRow && (
+                <thead className="bg-gray-50 dark:bg-gray-800/50 border-b-2 border-gray-300 dark:border-gray-600">
+                  <tr>
+                    {Array.from(headerRow.children).map((cell, j) => (
+                      <th key={j} className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-gray-100 first:pl-6 last:pr-6 border-r border-gray-300 dark:border-gray-600 last:border-r-0">
+                        {cell.textContent}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              )}
+              {bodyRows.length > 0 && (
+                <tbody>
+                  {bodyRows.map((row, i) => (
+                    <tr key={i} className="group border-b border-gray-200 dark:border-gray-700 last:border-b-0">
+                      {Array.from(row.children).map((cell, j) => (
+                        <td key={j} className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 first:pl-6 last:pr-6 border-r border-gray-200 dark:border-gray-700 last:border-r-0">
+                          <div className="flex items-center min-h-[2rem]">
+                            <span className="flex-1">{cell.textContent}</span>
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  {/* 새 행 추가 버튼 */}
+                  <tr className="border-t border-dashed border-gray-400 dark:border-gray-500">
+                    <td colSpan={headerRow.children.length} className="px-4 py-3">
+                      <button className="flex items-center space-x-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors duration-150">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span className="text-sm">새 행 추가</span>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              )}
+            </table>
+
+            {/* Bottom border area: a border-like area under the table for hover controls */}
+            <div className="border-t-2 border-gray-300 dark:border-gray-600 mt-2 pt-2 pb-2 flex justify-center group">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!editor) return;
+                  const wrapper = (e.currentTarget as HTMLElement).closest('.notion-table-wrapper');
+                  const tableEl = wrapper?.querySelector('table');
+                  // pick a cell from the last row
+                  const rows = tableEl?.querySelectorAll('tr');
+                  const lastRow = rows && rows.length ? rows[rows.length - 1] : null;
+                  const cell = lastRow?.querySelector('td,th');
+                  if (!cell) return;
+                  try {
+                    const posInfo = (editor.view as any).posAtDOM(cell, 0);
+                    if (!posInfo || typeof posInfo.pos !== 'number') return;
+                    editor.chain().focus().setTextSelection({ from: posInfo.pos, to: posInfo.pos }).addRowAfter().run();
+                  } catch (err) {
+                    console.error('Failed to add row', err);
+                  }
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 w-8 h-8 bg-gray-800/90 text-white rounded-md flex items-center justify-center shadow-md border border-gray-700"
+                title="행 추가"
+              >
+                <span className="text-lg font-semibold">+</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // HTML 파싱 및 각 기능별 렌더링
+  const parseHtml = (html: string) => {
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    const nodes: React.ReactNode[] = [];
+    container.childNodes.forEach((node) => {
+      if (node.nodeType === 1) {
+        const el = node as Element;
+        if (el.classList.contains('math-block') || el.classList.contains('math-inline')) nodes.push(renderMath(el));
+        else if (el.classList.contains('mermaid-block')) nodes.push(<MermaidRenderer code={el.textContent || ''} />);
+        else if (el.tagName === 'IFRAME') nodes.push(renderIframe(el));
+        else if (el.tagName === 'TABLE') nodes.push(renderTable(el));
+        else nodes.push(React.createElement(el.tagName.toLowerCase(), {}, el.textContent));
+      } else if (node.nodeType === 3) {
+        nodes.push(node.textContent);
+      }
+    });
+    return nodes;
+  };
+
+  return <div>{parseHtml(html)}</div>;
+};
+
+// 수식 입력 모달 (Word/한글 스타일)
+const EquationInputModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onClose: () => void; onInsert: (latex: string, isBlock: boolean) => void }) => {
+  const [input, setInput] = useState('');
+  const [isBlock, setIsBlock] = useState(false);
+  return (
+    <Modal isOpen={isOpen} onRequestClose={onClose} contentLabel="수식 입력" style={{ content: { maxWidth: 500, margin: 'auto' } }}>
+      <h2>수식 입력 (LaTeX)</h2>
+      <div className="mb-4">
+        <label className="flex items-center gap-2">
+          <input type="radio" checked={!isBlock} onChange={() => setIsBlock(false)} />
+          인라인 수식 ($...$)
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" checked={isBlock} onChange={() => setIsBlock(true)} />
+          블록 수식 ($$...$$)
+        </label>
+      </div>
+      <input value={input} onChange={e => setInput(e.target.value)} className="w-full border p-2 mb-2" placeholder="예: E=mc^2" />
+      <div className="border p-2 mb-2 min-h-[40px] flex items-center justify-center">
+        {input && (isBlock ? <BlockMath math={input} /> : <InlineMath math={input} />)}
+      </div>
+      <div className="flex gap-2 justify-end">
+        <button onClick={onClose}>취소</button>
+        <button onClick={() => { onInsert(input, isBlock); onClose(); setInput(''); }} className="bg-blue-500 text-white px-3 py-1 rounded">삽입</button>
+      </div>
+    </Modal>
+  );
+};
+
+const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onClose: () => void; onInsert: (rows: number, cols: number) => void }) => {
+  const [rows, setRows] = useState(3);
+  const [cols, setCols] = useState(3);
+
+  const handleInsert = () => {
+    onInsert(rows, cols);
+    onClose();
+    setRows(3);
+    setCols(3);
+  };
+
+  return (
+    <Modal isOpen={isOpen} onRequestClose={onClose} contentLabel="표 삽입" style={{ content: { maxWidth: 400, margin: 'auto' } }}>
+      <h2 className="text-lg font-semibold mb-4">표 크기 설정</h2>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">행 수</label>
+          <input
+            type="number"
+            min="1"
+            max="20"
+            value={rows}
+            onChange={(e) => setRows(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+            className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">열 수</label>
+          <input
+            type="number"
+            min="1"
+            max="20"
+            value={cols}
+            onChange={(e) => setCols(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+            className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="text-sm text-gray-600">
+          {rows}행 × {cols}열 표가 생성됩니다.
+        </div>
+      </div>
+      <div className="flex gap-2 justify-end mt-6">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+        >
+          취소
+        </button>
+        <button
+          onClick={handleInsert}
+          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors"
+        >
+          표 삽입
+        </button>
+      </div>
+    </Modal>
+  );
+};
 
   // If Workspace is providing tabs/activeTabId, treat them as the single source of truth.
   const currentTabs = externalTabs ?? tabs;
@@ -588,6 +863,102 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
 
     return () => clearTimeout(timeoutId);
   }, [tabs, activeTabId, editor?.state.doc, isEditorReady]);
+
+  // Mermaid 초기화
+  useEffect(() => {
+    mermaid.initialize({ startOnLoad: false, theme: 'default' });
+  }, []);
+
+  // 수식 모달 이벤트 리스너
+  useEffect(() => {
+    const handleOpenEquationModal = () => {
+      setIsEquationModalOpen(true);
+    };
+
+    window.addEventListener('openEquationModal', handleOpenEquationModal);
+    return () => {
+      window.removeEventListener('openEquationModal', handleOpenEquationModal);
+    };
+  }, []);
+
+  // 표 삽입 모달 이벤트 리스너
+  useEffect(() => {
+    const handleOpenTableInsertModal = () => {
+      setIsTableInsertModalOpen(true);
+    };
+
+    window.addEventListener('openTableInsertModal', handleOpenTableInsertModal);
+    return () => {
+      window.removeEventListener('openTableInsertModal', handleOpenTableInsertModal);
+    };
+  }, []);
+
+  // Mouse tracking for table controls overlay
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+
+    let lastTable: HTMLElement | null = null;
+
+    const onMove = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const cell = target.closest('td,th') as HTMLElement | null;
+      if (!cell) {
+        if (lastTable) {
+          lastTable = null;
+          setShowTableControls(false);
+          setTableControlPos(null);
+          setHoveredCellRect(null);
+        }
+        return;
+      }
+
+      const table = cell.closest('table') as HTMLElement | null;
+      if (!table) return;
+      lastTable = table;
+      const tableRect = table.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      const cellRect = cell.getBoundingClientRect();
+
+      // compute button positions relative to container
+      const rightLeft = Math.round(tableRect.right - containerRect.left - 20);
+      const rightTop = Math.round(tableRect.top - containerRect.top + tableRect.height / 2 - 16);
+      const bottomLeft = Math.round(tableRect.left - containerRect.left + tableRect.width / 2 - 16);
+      const bottomTop = Math.round(tableRect.bottom - containerRect.top - 20);
+
+      setTableControlPos({ rightLeft, rightTop, bottomLeft, bottomTop });
+      setHoveredCellRect(cellRect);
+      setShowTableControls(true);
+    };
+
+    const onLeave = () => {
+      setShowTableControls(false);
+      setTableControlPos(null);
+      setHoveredCellRect(null);
+    };
+
+    container.addEventListener('mousemove', onMove);
+    container.addEventListener('mouseleave', onLeave);
+    return () => {
+      container.removeEventListener('mousemove', onMove);
+      container.removeEventListener('mouseleave', onLeave);
+    };
+  }, [editorContainerRef]);
+
+  // 표 삽입 핸들러
+  const handleTableInsert = (rows: number, cols: number) => {
+    if (!editor) return;
+
+    editor.chain().focus().insertTable({ rows, cols, withHeaderRow: false }).run();
+  };
+
+  // 수식 삽입 핸들러
+  const handleEquationInsert = (latex: string, isBlock: boolean = false) => {
+    if (!editor) return;
+    const content = isBlock ? `$$${latex}$$` : `$${latex}$`;
+    editor.chain().focus().insertContent(content).run();
+  };
 
   // 문서 목록 사이드바 상태 변경 시 localStorage에 저장
   useEffect(() => {
@@ -969,7 +1340,12 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
 
   const htmlToMarkdown = (html: string): string => {
     // turndown 라이브러리를 사용해서 HTML을 마크다운으로 변환
-    const turndownService = new TurndownService();
+    const turndownService = new TurndownService({
+      headingStyle: 'atx',
+      codeBlockStyle: 'fenced'
+    });
+
+    // 기본적으로 표를 마크다운으로 변환하도록 설정
     return turndownService.turndown(html);
   };
 
@@ -1470,7 +1846,6 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     let newActiveTabId = '';
     if (currentIndex > 0) {
       newActiveTabId = (currentTabs || [])[currentIndex - 1].id;
-    } else if (tabs.length > 1) {
       newActiveTabId = (currentTabs || [])[1].id;
     }
     updateTabs(newTabs);
@@ -1998,7 +2373,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         >
         
           {/* 에디터 컨텐츠 영역 */}
-          <div className="flex-1 min-h-0 cursor-text relative overflow-y-auto" onClick={() => editor?.commands.focus()}>
+          <div ref={editorContainerRef} className="flex-1 min-h-0 cursor-text relative overflow-y-auto" onClick={() => editor?.commands.focus()}>
         {!isEditorReady ? (
           <div className="flex flex-col items-center justify-center h-full p-6">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
@@ -2032,6 +2407,51 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
               </div>
             ))}
           </div>
+        )}
+
+        {/* Table controls overlay (add column / add row) */}
+        {showTableControls && tableControlPos && (
+          <>
+            <div
+              onClick={async () => {
+                if (!editor || !hoveredCellRect) return;
+                try {
+                  const posInfo = (editor.view as any).posAtCoords({ left: hoveredCellRect.left + 2, top: hoveredCellRect.top + 2 });
+                  if (!posInfo || typeof posInfo.pos !== 'number') return;
+                  const pos = posInfo.pos;
+                  // set selection to the hovered cell and add a column after
+                  await editor.chain().focus().setTextSelection({ from: pos, to: pos }).addColumnAfter().run();
+                } catch (e) {
+                  console.error('add column failed', e);
+                }
+              }}
+              style={{ position: 'absolute', left: tableControlPos.rightLeft, top: tableControlPos.rightTop }}
+              className="z-50 w-8 h-8 bg-gray-700 text-white rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-600"
+              title="열 추가"
+            >
+              +
+            </div>
+
+            <div
+              onClick={async () => {
+                if (!editor || !hoveredCellRect) return;
+                try {
+                  const posInfo = (editor.view as any).posAtCoords({ left: hoveredCellRect.left + 2, top: hoveredCellRect.top + 2 });
+                  if (!posInfo || typeof posInfo.pos !== 'number') return;
+                  const pos = posInfo.pos;
+                  // set selection to hovered cell and add a row after
+                  await editor.chain().focus().setTextSelection({ from: pos, to: pos }).addRowAfter().run();
+                } catch (e) {
+                  console.error('add row failed', e);
+                }
+              }}
+              style={{ position: 'absolute', left: tableControlPos.bottomLeft, top: tableControlPos.bottomTop }}
+              className="z-50 w-8 h-8 bg-gray-700 text-white rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-600"
+              title="행 추가"
+            >
+              +
+            </div>
+          </>
         )}
       </div>
       </div>
@@ -2170,6 +2590,16 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
         onChange={setPersona}
         onConfirm={handlePersonaConfirm}
         onCancel={handlePersonaCancel}
+      />
+      <EquationInputModal
+        isOpen={isEquationModalOpen}
+        onClose={() => setIsEquationModalOpen(false)}
+        onInsert={handleEquationInsert}
+      />
+      <TableInsertModal
+        isOpen={isTableInsertModalOpen}
+        onClose={() => setIsTableInsertModalOpen(false)}
+        onInsert={handleTableInsert}
       />
       
       {/* AI 요청 버튼 - 에디터 텍스트박스 우측 하단 고정 */}

@@ -199,6 +199,40 @@ code {
   color: #60a5fa; /* blue-400 */
 }
 
+/* Force tables inside the editor to fill available width and show clear grid lines */
+.ProseMirror table,
+.not-prose table {
+  width: 100% !important;
+  table-layout: auto; /* allow columns to size naturally and fill width */
+  border-collapse: collapse;
+}
+
+.ProseMirror th,
+.ProseMirror td,
+.not-prose th,
+.not-prose td {
+  border: 1px solid #e5e7eb; /* gray-200 */
+  padding: 0.75rem; /* match tailwind px-4 py-3-ish */
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.ProseMirror td,
+.ProseMirror th { min-width: 0; }
+
+.dark .ProseMirror th,
+.dark .ProseMirror td,
+.dark .not-prose th,
+.dark .not-prose td {
+  border-color: #374151; /* gray-700 */
+}
+
+.ProseMirror thead th,
+.not-prose thead th {
+  background-color: #f8fafc; /* gray-50 */
+}
+
+
 .dark .ProseMirror a:hover {
   color: #3b82f6; /* blue-500 */
 }
