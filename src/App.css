@@ -30,6 +30,29 @@
   --border-color: #334155;
 }
 
+/* AI 선택 하이라이트 스타일 */
+.ai-selection-highlight {
+  background-color: rgba(99, 102, 241, 0.2);
+  border-radius: 3px;
+  padding: 2px 0;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4);
+  animation: ai-selection-pulse 2s ease-in-out infinite;
+}
+
+[data-theme="dark"] .ai-selection-highlight {
+  background-color: rgba(129, 140, 248, 0.3);
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.5);
+}
+
+@keyframes ai-selection-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -440,6 +463,7 @@ body {
 
 .ProseMirror p {
   margin: 0.75rem 0;
+  color: var(--text-primary);
 }
 
 .ProseMirror blockquote {
@@ -458,6 +482,7 @@ body {
   margin: 1rem 0;
   overflow-x: auto;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: var(--text-primary);
 }
 
 .ProseMirror code {
@@ -466,6 +491,7 @@ body {
   border-radius: 3px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 0.875em;
+  color: var(--text-primary);
 }
 
 .editor-content-wrapper {
@@ -488,8 +514,8 @@ body {
 }
 
 .editor-content:focus-within {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.05);
 }
 
 .ai-response {
@@ -927,6 +953,7 @@ textarea:focus-visible {
 
 .ProseMirror li {
   margin: 0.25rem 0;
+  color: var(--text-primary);
 }
 
 .ProseMirror li p {

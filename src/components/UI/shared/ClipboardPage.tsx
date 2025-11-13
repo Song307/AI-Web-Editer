@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { Clipboard2, Trash3, ClipboardCheck, Image, FileText, Inbox, FileEarmarkPdf } from 'react-bootstrap-icons';
-import PDFViewer from '../../tools/PDFViewer';
+import PDFViewer from '../../../components/tools/PDFViewer';
 
 interface ClipboardItem {
   id: string;
@@ -19,6 +19,8 @@ const ClipboardPage: React.FC = () => {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [activeItem, setActiveItem] = useState<ClipboardItem | null>(null);
+  const clipboardRef = useRef<HTMLDivElement>(null);
+  const [isClipboardSelected, setIsClipboardSelected] = useState(false);
 
   useEffect(() => {
     const items = loadClipboardItems();
@@ -28,12 +30,67 @@ const ClipboardPage: React.FC = () => {
     }
   }, []);
 
+  // localStorage 변경 감지 (다른 컴포넌트에서의 클립보드 변경 반영)
   useEffect(() => {
-    // Handle Ctrl+V / Cmd+V paste event
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'clipboardItems') {
+        loadClipboardItems();
+      }
+    };
+
+    const handleCustomClipboardChange = () => {
+      loadClipboardItems();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('clipboardChanged', handleCustomClipboardChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('clipboardChanged', handleCustomClipboardChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Handle Ctrl+V / Cmd+V paste event - only when clipboard is selected
     const handlePaste = async (e: ClipboardEvent) => {
-      // Only handle if not focused on textarea
-      if (document.activeElement?.tagName === 'TEXTAREA') {
+      // 클립보드가 선택된 상태가 아니면 무시
+      if (!isClipboardSelected) {
         return;
+      }
+
+      // 이벤트가 발생한 요소가 에디터 영역인지 확인
+      const target = e.target as Element;
+      if (target) {
+        // 에디터 컨테이너나 그 안의 요소에서 발생한 이벤트면 무시
+        if (target.id === 'editor-container' || target.closest('#editor-container')) {
+          return;
+        }
+        // ProseMirror 요소나 그 안의 요소에서 발생한 이벤트면 무시
+        if (target.classList.contains('ProseMirror') || target.closest('.ProseMirror')) {
+          return;
+        }
+        // textarea에서 발생한 이벤트면 무시
+        if (target.tagName === 'TEXTAREA') {
+          return;
+        }
+      }
+
+      // 포커스가 있는 요소가 에디터 영역인지 확인
+      const activeElement = document.activeElement;
+      if (activeElement) {
+        // 에디터 컨테이너에 포커스가 있거나
+        if (activeElement.id === 'editor-container' || activeElement.closest('#editor-container')) {
+          return;
+        }
+        // ProseMirror 요소에 포커스가 있거나
+        if (activeElement.classList.contains('ProseMirror') || activeElement.closest('.ProseMirror')) {
+          return;
+        }
+        // textarea에 포커스가 있으면
+        if (activeElement.tagName === 'TEXTAREA') {
+          return;
+        }
       }
 
       e.preventDefault();
@@ -68,8 +125,17 @@ const ClipboardPage: React.FC = () => {
     };
 
     document.addEventListener('paste', handlePaste);
+
+    // 클립보드 컴포넌트에도 paste 이벤트 리스너 추가
+    if (clipboardRef.current) {
+      clipboardRef.current.addEventListener('paste', handlePaste);
+    }
+
     return () => {
       document.removeEventListener('paste', handlePaste);
+      if (clipboardRef.current) {
+        clipboardRef.current.removeEventListener('paste', handlePaste);
+      }
     };
   }, [clipboardItems]);
 
@@ -112,6 +178,26 @@ const ClipboardPage: React.FC = () => {
     };
   }, [historyIndex, history, selectedItems, clipboardItems]);
 
+  const handleClipboardClick = (e: React.MouseEvent) => {
+    // 클립보드 영역을 클릭하면 선택 상태 토글
+    e.stopPropagation();
+    setIsClipboardSelected(!isClipboardSelected);
+  };
+
+  // 클립보드 외부 클릭 시 선택 해제
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (clipboardRef.current && !clipboardRef.current.contains(event.target as Node)) {
+        setIsClipboardSelected(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const loadClipboardItems = (): ClipboardItem[] => {
     const stored = localStorage.getItem('clipboardItems');
     if (stored) {
@@ -128,6 +214,9 @@ const ClipboardPage: React.FC = () => {
   const saveClipboardItems = (items: ClipboardItem[]) => {
     localStorage.setItem('clipboardItems', JSON.stringify(items));
     setClipboardItems(items);
+    
+    // 다른 컴포넌트에 변경 알림
+    window.dispatchEvent(new CustomEvent('clipboardChanged'));
     
     // Add to history
     const newHistory = history.slice(0, historyIndex + 1);
@@ -324,14 +413,30 @@ const ClipboardPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div 
+      ref={clipboardRef} 
+      className={`h-full flex flex-col bg-gray-50 dark:bg-gray-900 transition-all duration-200 ${
+        isClipboardSelected 
+          ? 'ring-2 ring-blue-500 ring-inset' 
+          : 'hover:ring-1 hover:ring-gray-300 hover:ring-inset'
+      }`}
+      tabIndex={-1}
+    >
       {/* Header */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-8 shadow-lg">
+      <div 
+        className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-8 shadow-lg cursor-pointer"
+        onClick={handleClipboardClick}
+      >
         <h2 className="text-2xl font-bold m-0 text-gray-900 dark:text-gray-100 flex items-center gap-3">
           <ClipboardCheck size={28} /> 클립보드 관리
+          {isClipboardSelected && (
+            <span className="text-sm bg-blue-500 text-white px-2 py-1 rounded-full">
+              선택됨
+            </span>
+          )}
         </h2>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 mb-0">
-          텍스트와 이미지를 저장하고 관리하세요 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Ctrl+V</kbd> 빠른 추가 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Ctrl+Z</kbd> 되돌리기 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Backspace</kbd> 삭제 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Enter</kbd> 텍스트 추가
+          텍스트와 이미지를 저장하고 관리하세요 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">헤더 클릭하여 선택</kbd> 후 <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Ctrl+V</kbd> 붙여넣기 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Ctrl+Z</kbd> 되돌리기 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Backspace</kbd> 삭제 · <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Enter</kbd> 텍스트 추가
         </p>
       </div>
 

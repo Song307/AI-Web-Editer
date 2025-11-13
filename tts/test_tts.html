@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTS 테스트</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Edge TTS 테스트</h1>
+
+    <div class="form-group">
+        <label for="text">텍스트:</label>
+        <input type="text" id="text" value="안녕하세요, Edge TTS 테스트입니다." />
+    </div>
+
+    <div class="form-group">
+        <label for="voice">목소리:</label>
+        <select id="voice">
+            <option value="ko-KR-SunHiNeural">한국어 여성 (SunHi) - 자신감 있고 격식 있는</option>
+            <option value="ko-KR-InJoonNeural">한국어 남성 (InJoon) - 캐주얼하고 친근한</option>
+            <option value="ko-KR-YuJinNeural">한국어 여성 (YuJin) - 밝고 명랑한</option>
+            <option value="ko-KR-JiMinNeural">한국어 여성 (JiMin) - 부드럽고 자연스러운</option>
+            <option value="ko-KR-SeoHyeonNeural">한국어 여성 (SeoHyeon) - 호기심 많고 쾌활한</option>
+            <option value="ko-KR-SoonBokNeural">한국어 여성 (SoonBok) - 생동감 있고 밝은</option>
+            <option value="ko-KR-BongJinNeural">한국어 남성 (BongJin) - 안정적이고 신뢰감 있는</option>
+            <option value="ko-KR-GookMinNeural">한국어 남성 (GookMin) - 차분하고 진중한</option>
+            <option value="ko-KR-HyunsuNeural">한국어 남성 (Hyunsu) - 밝고 캐주얼한</option>
+            <option value="ko-KR-HyunsuMultilingualNeural">한국어 남성 (Hyunsu 다국어) - 격식 있고 명확한</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="rate">말하기 속도 (Rate: -10% ~ +10%):</label>
+        <input type="range" id="rate" min="-10" max="10" value="0" step="1" />
+        <span id="rateValue">0%</span>
+    </div>
+
+    <div class="form-group">
+        <label for="pitch">목소리 톤 (Pitch: -50Hz ~ +50Hz):</label>
+        <input type="range" id="pitch" min="-50" max="50" value="0" step="5" />
+        <span id="pitchValue">0Hz</span>
+    </div>
+
+    <button onclick="testTTS()">음성 생성 및 재생</button>
+
+    <div id="result" class="result" style="display: none;"></div>
+
+    <script>
+        // 슬라이더 값 표시 업데이트
+        document.getElementById('rate').addEventListener('input', function() {
+            document.getElementById('rateValue').textContent = this.value + '%';
+        });
+
+        document.getElementById('pitch').addEventListener('input', function() {
+            document.getElementById('pitchValue').textContent = this.value + 'Hz';
+        });
+
+        async function testTTS() {
+            const text = document.getElementById('text').value;
+            const voice = document.getElementById('voice').value;
+            const rate = document.getElementById('rate').value;
+            const pitch = document.getElementById('pitch').value;
+
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result';
+            resultDiv.textContent = '음성 생성 중...';
+
+            try {
+                const response = await fetch('http://localhost:5003/test-tts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        voice: voice,
+                        rate: rate,
+                        pitch: pitch
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `성공! 파일 크기: ${data.size} bytes`;
+
+                    // 오디오 재생
+                    const audioBuffer = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
+                    const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+                    const audioUrl = URL.createObjectURL(blob);
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = '오류: ' + data.error;
+                }
+
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '네트워크 오류: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

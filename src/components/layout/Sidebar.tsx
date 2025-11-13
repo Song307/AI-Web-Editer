@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, ClipboardCheck, Gear, Plus, Trash3, Folder, Database, Palette, MenuButton, X } from 'react-bootstrap-icons';
+import { FileText, ClipboardCheck, Gear, Plus, Trash3, Folder, Database, Palette, MenuButton, X, Robot, ChatDots } from 'react-bootstrap-icons';
 import { Document } from '../../utils/db';
 
 interface SidebarProps {
@@ -11,6 +11,7 @@ interface SidebarProps {
   createNewDocument: () => void;
   handleRenameStart: (doc: Document) => void;
   handleDelete: (id: string) => void;
+  editorRef: React.RefObject<{ handleSave: () => void; saveEditorStateToCookie: () => void } | null>;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -21,8 +22,18 @@ const Sidebar: React.FC<SidebarProps> = ({
   createNewDocument,
   handleRenameStart,
   handleDelete,
+  editorRef,
 }) => {
   const navigate = useNavigate();
+
+  const handleNavigation = (path: string) => {
+    // 에디터 상태를 쿠키에 저장
+    if (editorRef.current?.saveEditorStateToCookie) {
+      editorRef.current.saveEditorStateToCookie();
+    }
+    navigate(path);
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
 
   return (
     <>
@@ -41,7 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex justify-end mb-4">
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="flex items-center justify-center w-8 h-8 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-none rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105"
+            className="flex items-center justify-center w-8 h-8 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105"
             title={isSidebarOpen ? (language === 'ko' ? '사이드바 닫기' : 'Close Sidebar') : (language === 'ko' ? '사이드바 열기' : 'Open Sidebar')}
           >
             {isSidebarOpen ? <X size={16} /> : <MenuButton size={16} />}
@@ -53,10 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           !isSidebarOpen ? 'items-center' : ''
         }`}>
           <button
-            onClick={() => {
-              navigate('/workspace');
-              if (window.innerWidth < 768) setIsSidebarOpen(false);
-            }}
+            onClick={() => handleNavigation('/workspace')}
             className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
               window.location.pathname === '/workspace'
                 ? 'bg-indigo-600 text-white'
@@ -68,10 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {isSidebarOpen && <span>{language === 'ko' ? '워크스페이스' : 'Workspace'}</span>}
           </button>
           <button
-            onClick={() => {
-              navigate('/documents');
-              if (window.innerWidth < 768) setIsSidebarOpen(false);
-            }}
+            onClick={() => handleNavigation('/documents')}
             className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
               (window.location.pathname.startsWith('/documents') || window.location.pathname === '/')
                 ? 'bg-indigo-600 text-white'
@@ -83,10 +88,19 @@ const Sidebar: React.FC<SidebarProps> = ({
             {isSidebarOpen && <span>{language === 'ko' ? '문서' : 'Documents'}</span>}
           </button>
           <button
-            onClick={() => {
-              navigate('/clipboard');
-              if (window.innerWidth < 768) setIsSidebarOpen(false);
-            }}
+            onClick={() => handleNavigation('/ai-assistant')}
+            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+              window.location.pathname === '/ai-assistant'
+                ? 'bg-indigo-600 text-white'
+                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
+            title={language === 'ko' ? 'AI 어시스턴트' : 'AI Assistant'}
+          >
+            <ChatDots size={isSidebarOpen ? 18 : 24} />
+            {isSidebarOpen && <span>{language === 'ko' ? 'AI 어시스턴트' : 'AI Assistant'}</span>}
+          </button>
+          <button
+            onClick={() => handleNavigation('/clipboard')}
             className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
               window.location.pathname === '/clipboard'
                 ? 'bg-indigo-600 text-white'
@@ -98,25 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {isSidebarOpen && <span>{language === 'ko' ? '클립보드' : 'Clipboard'}</span>}
           </button>
           <button
-            onClick={() => {
-              navigate('/storage');
-              if (window.innerWidth < 768) setIsSidebarOpen(false);
-            }}
-            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
-              window.location.pathname === '/storage'
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
-            title={language === 'ko' ? '저장공간' : 'Storage'}
-          >
-            <Database size={isSidebarOpen ? 18 : 24} />
-            {isSidebarOpen && <span>{language === 'ko' ? '저장공간' : 'Storage'}</span>}
-          </button>
-          <button
-            onClick={() => {
-              navigate('/image-editor');
-              if (window.innerWidth < 768) setIsSidebarOpen(false);
-            }}
+            onClick={() => handleNavigation('/image-editor')}
             className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
               window.location.pathname === '/image-editor'
                 ? 'bg-indigo-600 text-white'
@@ -128,10 +124,19 @@ const Sidebar: React.FC<SidebarProps> = ({
             {isSidebarOpen && <span>{language === 'ko' ? '이미지 편집기' : 'Image Editor'}</span>}
           </button>
           <button
-            onClick={() => {
-              navigate('/settings');
-              if (window.innerWidth < 768) setIsSidebarOpen(false);
-            }}
+            onClick={() => handleNavigation('/storage')}
+            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
+              window.location.pathname === '/storage'
+                ? 'bg-indigo-600 text-white'
+                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+            } ${!isSidebarOpen ? 'w-full justify-center px-3 py-4' : ''}`}
+            title={language === 'ko' ? '저장공간' : 'Storage'}
+          >
+            <Database size={isSidebarOpen ? 18 : 24} />
+            {isSidebarOpen && <span>{language === 'ko' ? '저장공간' : 'Storage'}</span>}
+          </button>
+          <button
+            onClick={() => handleNavigation('/settings')}
             className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-left rounded-lg cursor-pointer transition-all duration-300 ${
               window.location.pathname === '/settings'
                 ? 'bg-indigo-600 text-white'
@@ -153,7 +158,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </h2>
               <button
                 onClick={createNewDocument}
-                className="flex items-center justify-center w-7 h-7 bg-indigo-600 text-white border-none rounded cursor-pointer transition-transform hover:scale-110"
+                className="flex items-center justify-center w-  7 h-7 bg-indigo-600 text-white border-none rounded cursor-pointer transition-transform hover:scale-110"
                 title={language === 'ko' ? '새 문서' : 'New Document'}
               >
                 <Plus size={16} />
@@ -166,6 +171,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  // 에디터 상태를 쿠키에 저장
+                  if (editorRef.current?.saveEditorStateToCookie) {
+                    editorRef.current.saveEditorStateToCookie();
+                  }
                   setTimeout(() => {
                     navigate(`/documents/${doc.id}`);
                   }, 0);

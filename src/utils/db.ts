@@ -1,5 +1,38 @@
 // src/utils/db.ts
-export interface Document {
+
+export interface SecretaryCreationData {
+  name: string;
+  gender: 'male' | 'female';
+  personality: string;
+  imageUrl?: string;
+  voiceParams: {
+    rate: number;
+    pitch: number;
+    voiceName: string;
+  };
+}
+
+export interface VoiceParams {
+  rate: number;
+  pitch: number;
+  voiceName: string;
+}
+
+export interface AISecretary {
+  id: string;
+  name: string;
+  gender: 'male' | 'female';
+  personality: string;
+  personalityPrompt: string;
+  imageUrl?: string;
+  voiceParams: {
+    rate: number;
+    pitch: number;
+    voiceName: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}export interface Document {
   id: string;
   title: string;
   content: string;
@@ -46,54 +79,157 @@ export interface EditedImageFile {
 
 
 const DB_NAME = 'AITextEditorDB';
-const DB_VERSION = 5; // 버전 업그레이드 (동영상 저장소 추가)
+const DB_VERSION = 12; // 버전 올림 - 브라우저에 이미 버전 12가 존재
 const DOCUMENTS_STORE = 'documents';
 const IMAGES_STORE = 'images';
 const PDFS_STORE = 'pdfs';
 const VIDEOS_STORE = 'videos';
+const AI_SECRETARIES_STORE = 'aiSecretaries';
 
 let db: IDBDatabase | null = null;
 
+export const deleteAndReinitDB = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+  // IndexedDB 삭제 및 재초기화 시작 (로그 제거)
+    
+    // 기존 연결 닫기
+      if (db) {
+      db.close();
+      db = null;
+    }
+
+    const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
+
+    deleteRequest.onerror = () => {
+      console.error('데이터베이스 삭제 실패:', deleteRequest.error);
+      reject(deleteRequest.error);
+    };
+
+    deleteRequest.onblocked = () => {
+      console.warn('데이터베이스 삭제가 차단됨 - 모든 탭을 닫아주세요');
+      reject(new Error('데이터베이스 삭제가 차단되었습니다. 모든 탭을 닫고 다시 시도하세요.'));
+    };
+
+    deleteRequest.onsuccess = () => {
+      // 데이터베이스 삭제 성공, 재초기화 진행 (로그 제거)
+      setTimeout(() => {
+        initDB().then(resolve).catch(reject);
+      }, 100);
+    };
+  });
+};
+
+export const forceInitDB = async (): Promise<void> => {
+  // 강제 데이터베이스 초기화 시작 (로그 제거)
+  try {
+    // 데이터베이스 삭제 후 재생성
+    await deleteAndReinitDB();
+  // 강제 데이터베이스 초기화 완료 (로그 제거)
+  } catch (error) {
+    console.error('강제 데이터베이스 초기화 실패:', error);
+    throw error;
+  }
+};
+
 export const initDB = (): Promise<void> => {
   return new Promise((resolve, reject) => {
+  // IndexedDB 초기화 시작 (로그 제거)
+
+    // 이미 초기화된 데이터베이스가 있으면 닫기
+    if (db) {
+      db.close();
+      db = null;
+    }
+
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
+    request.onerror = (event) => {
+      console.error('IndexedDB 초기화 실패:', request.error);
+      console.error('에러 이벤트:', event);
+      reject(request.error);
+    };
+
+    request.onblocked = () => {
+      console.warn('IndexedDB 초기화가 차단됨 - 다른 탭에서 데이터베이스를 사용 중');
+      reject(new Error('데이터베이스가 다른 탭에서 사용 중입니다. 다른 탭을 닫고 다시 시도하세요.'));
+    };
+
+    request.onsuccess = (event) => {
       db = request.result;
+  // IndexedDB 초기화 성공 (로그 제거)
+
+      // 필수 객체 스토어가 모두 있는지 확인
+      const requiredStores = [DOCUMENTS_STORE, IMAGES_STORE, PDFS_STORE, VIDEOS_STORE, AI_SECRETARIES_STORE];
+      const missingStores = requiredStores.filter(store => !db!.objectStoreNames.contains(store));
+      
+      if (missingStores.length > 0) {
+        console.error('누락된 객체 스토어:', missingStores);
+        db!.close();
+        db = null;
+        // 버전을 올려서 다시 시도
+        indexedDB.deleteDatabase(DB_NAME).onsuccess = () => {
+          setTimeout(() => {
+            initDB().then(resolve).catch(reject);
+          }, 100);
+        };
+        return;
+      }
+
+      // 데이터베이스 연결이 끊어졌을 때 재연결
+      db.onversionchange = () => {
+        // 데이터베이스 버전 변경 감지 - 연결 종료 (로그 제거)
+        db?.close();
+        db = null;
+      };
+
       resolve();
     };
 
     request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      
+  // 데이터베이스 업그레이드 필요 (로그 제거)
+      const upgradeDb = (event.target as IDBOpenDBRequest).result;
+
       // 문서 저장소 (기존)
-      if (!db.objectStoreNames.contains(DOCUMENTS_STORE)) {
-        const store = db.createObjectStore(DOCUMENTS_STORE, { keyPath: 'id' });
+      if (!upgradeDb.objectStoreNames.contains(DOCUMENTS_STORE)) {
+        const store = upgradeDb.createObjectStore(DOCUMENTS_STORE, { keyPath: 'id' });
         store.createIndex('title', 'title', { unique: false });
         store.createIndex('createdAt', 'createdAt', { unique: false });
+  // 문서 저장소 생성됨 (로그 제거)
       }
-      
-      // 이미지 저장소 (신규)
-      if (!db.objectStoreNames.contains(IMAGES_STORE)) {
-        const imageStore = db.createObjectStore(IMAGES_STORE, { keyPath: 'id' });
+
+      // 이미지 저장소 (기존)
+      if (!upgradeDb.objectStoreNames.contains(IMAGES_STORE)) {
+        const imageStore = upgradeDb.createObjectStore(IMAGES_STORE, { keyPath: 'id' });
         imageStore.createIndex('name', 'name', { unique: false });
         imageStore.createIndex('createdAt', 'createdAt', { unique: false });
+  // 이미지 저장소 생성됨 (로그 제거)
       }
 
       // PDF 저장소 (신규)
-      if (!db.objectStoreNames.contains(PDFS_STORE)) {
-        const pdfStore = db.createObjectStore(PDFS_STORE, { keyPath: 'id' });
+      if (!upgradeDb.objectStoreNames.contains(PDFS_STORE)) {
+        const pdfStore = upgradeDb.createObjectStore(PDFS_STORE, { keyPath: 'id' });
         pdfStore.createIndex('name', 'name', { unique: false });
         pdfStore.createIndex('createdAt', 'createdAt', { unique: false });
+  // PDF 저장소 생성됨 (로그 제거)
       }
 
       // 동영상 저장소 (신규)
-      if (!db.objectStoreNames.contains(VIDEOS_STORE)) {
-        const videoStore = db.createObjectStore(VIDEOS_STORE, { keyPath: 'id' });
+      if (!upgradeDb.objectStoreNames.contains(VIDEOS_STORE)) {
+        const videoStore = upgradeDb.createObjectStore(VIDEOS_STORE, { keyPath: 'id' });
         videoStore.createIndex('name', 'name', { unique: false });
         videoStore.createIndex('createdAt', 'createdAt', { unique: false });
+  // 동영상 저장소 생성됨 (로그 제거)
       }
+
+      // AI 비서 저장소 (신규)
+      if (!upgradeDb.objectStoreNames.contains(AI_SECRETARIES_STORE)) {
+        const aiSecretaryStore = upgradeDb.createObjectStore(AI_SECRETARIES_STORE, { keyPath: 'id' });
+        aiSecretaryStore.createIndex('name', 'name', { unique: false });
+        aiSecretaryStore.createIndex('createdAt', 'createdAt', { unique: false });
+  // AI 비서 저장소 생성됨 (로그 제거)
+      }
+
+  // 데이터베이스 업그레이드 완료 (로그 제거)
     };
   });
 };
@@ -123,15 +259,52 @@ export const getDocument = async (id: string): Promise<Document | null> => {
 };
 
 export const getAllDocuments = async (): Promise<Document[]> => {
-  if (!db) await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db!.transaction([DOCUMENTS_STORE], 'readonly');
-    const store = transaction.objectStore(DOCUMENTS_STORE);
-    const request = store.getAll();
+  try {
+    if (!db) {
+      await initDB();
+      if (!db) {
+        throw new Error('Database initialization failed');
+      }
+    }
 
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-  });
+    return new Promise((resolve, reject) => {
+      try {
+        const transaction = db!.transaction([DOCUMENTS_STORE], 'readonly');
+        const store = transaction.objectStore(DOCUMENTS_STORE);
+        const request = store.getAll();
+
+        request.onerror = () => {
+          console.error('Error in getAll request:', request.error);
+          reject(request.error || new Error('Unknown error in getAll request'));
+        };
+
+        request.onsuccess = () => {
+          if (!Array.isArray(request.result)) {
+            console.error('Unexpected result format:', request.result);
+            reject(new Error('Expected an array of documents'));
+            return;
+          }
+          resolve(request.result);
+        };
+
+        transaction.oncomplete = () => {
+          // transaction completed
+        };
+
+        transaction.onerror = (event) => {
+          console.error('Transaction error:', event);
+          reject(transaction.error || new Error('Unknown transaction error'));
+        };
+
+      } catch (error) {
+        console.error('Error in getAllDocuments promise:', error);
+        reject(error);
+      }
+    });
+  } catch (error) {
+    console.error('Error in getAllDocuments function:', error);
+    throw error;
+  }
 };
 
 export const deleteDocument = async (id: string): Promise<void> => {
@@ -420,4 +593,185 @@ export const deleteEditedImage = async (id: string): Promise<void> => {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+};
+
+// AI 비서 저장하기
+export const saveAISecretary = async (secretaryData: SecretaryCreationData): Promise<AISecretary> => {
+  try {
+    // 데이터베이스 초기화 확인 및 재시도
+    let retries = 0;
+    const maxRetries = 3;
+    
+    while (retries < maxRetries) {
+      if (!db) {
+        console.log(`DB 초기화 시도 (${retries + 1}/${maxRetries})`);
+        await initDB();
+      }
+      
+      if (db && db.objectStoreNames.contains(AI_SECRETARIES_STORE)) {
+        break; // 성공
+      }
+      
+      console.log(`AI 비서 저장소 없음, 강제 초기화 (${retries + 1}/${maxRetries})`);
+      await forceInitDB();
+      retries++;
+      
+      if (retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 200)); // 200ms 대기
+      }
+    }
+
+    // 최종 확인
+    if (!db || !db.objectStoreNames.contains(AI_SECRETARIES_STORE)) {
+      throw new Error('AI 비서 저장소를 생성할 수 없습니다. 페이지를 새로고침해주세요.');
+    }
+
+    const secretary: AISecretary = {
+      id: Date.now().toString(),
+      name: secretaryData.name,
+      gender: secretaryData.gender,
+      personality: secretaryData.personality,
+      personalityPrompt: `너는 ${secretaryData.personality} 성격을 가진 AI 비서야. 사용자의 요청에 대해 이 성격을 반영해서 답변해줘.`,
+      imageUrl: secretaryData.imageUrl,
+      voiceParams: secretaryData.voiceParams,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    console.log('AI 비서 저장 시도:', secretary);
+
+    const transaction = db!.transaction([AI_SECRETARIES_STORE], 'readwrite');
+    const store = transaction.objectStore(AI_SECRETARIES_STORE);
+    return new Promise((resolve, reject) => {
+      const request = store.add(secretary);
+      request.onsuccess = () => {
+        console.log('AI 비서 저장 성공, ID:', secretary.id);
+        resolve(secretary);
+      };
+      request.onerror = () => {
+        console.error('AI 비서 저장 실패:', request.error);
+        reject(request.error);
+      };
+    });
+  } catch (error) {
+    console.error('AI 비서 저장 중 예외 발생:', error);
+    throw error;
+  }
+};
+
+// 모든 AI 비서 가져오기
+export const getAllAISecretaries = async (): Promise<AISecretary[]> => {
+  try {
+    // 데이터베이스 초기화 확인
+    if (!db) {
+      console.log('DB가 초기화되지 않음, 초기화 시도');
+      await initDB();
+    }
+
+    if (!db || !db.objectStoreNames.contains(AI_SECRETARIES_STORE)) {
+      console.log('AI 비서 저장소가 없음, 강제 초기화 시도');
+      await forceInitDB();
+    }
+
+    // 최종 확인
+    if (!db || !db.objectStoreNames.contains(AI_SECRETARIES_STORE)) {
+      console.warn('AI 비서 저장소를 찾을 수 없음, 빈 배열 반환');
+      return [];
+    }
+
+    console.log('AI 비서 목록 조회 시도');
+    const transaction = db!.transaction([AI_SECRETARIES_STORE], 'readonly');
+    const store = transaction.objectStore(AI_SECRETARIES_STORE);
+    return new Promise((resolve, reject) => {
+      const request = store.getAll();
+      request.onsuccess = () => {
+        console.log('AI 비서 목록 조회 성공, 개수:', request.result?.length || 0);
+        resolve(request.result || []);
+      };
+      request.onerror = () => {
+        console.error('AI 비서 목록 조회 실패:', request.error);
+        reject(request.error);
+      };
+    });
+  } catch (error) {
+    console.error('AI 비서 목록 조회 중 예외 발생:', error);
+    return []; // 에러 시 빈 배열 반환
+  }
+};
+
+// AI 비서 업데이트하기
+export const updateAISecretary = async (id: string, updates: Partial<AISecretary>): Promise<void> => {
+  try {
+    // 데이터베이스 초기화 확인
+    if (!db) {
+      await initDB();
+    }
+    
+    if (!db || !db.objectStoreNames.contains(AI_SECRETARIES_STORE)) {
+      console.log('AI 비서 저장소가 없음, 강제 초기화 시도');
+      await forceInitDB();
+    }
+
+    if (!db || !db.objectStoreNames.contains(AI_SECRETARIES_STORE)) {
+      throw new Error('AI 비서 저장소를 찾을 수 없습니다.');
+    }
+
+    const transaction = db!.transaction([AI_SECRETARIES_STORE], 'readwrite');
+    const store = transaction.objectStore(AI_SECRETARIES_STORE);
+    return new Promise((resolve, reject) => {
+      const getRequest = store.get(id);
+      getRequest.onsuccess = () => {
+        const secretary = getRequest.result;
+        if (secretary) {
+          const updatedSecretary = { ...secretary, ...updates, updatedAt: new Date() };
+          const putRequest = store.put(updatedSecretary);
+          putRequest.onsuccess = () => resolve();
+          putRequest.onerror = () => reject(putRequest.error);
+        } else {
+          reject(new Error('AI Secretary not found'));
+        }
+      };
+      getRequest.onerror = () => reject(getRequest.error);
+    });
+  } catch (error) {
+    console.error('AI 비서 업데이트 중 예외 발생:', error);
+    throw error;
+  }
+};
+
+// AI 비서 삭제
+export const deleteAISecretary = async (id: string): Promise<void> => {
+  try {
+    // 데이터베이스 초기화 확인
+    if (!db) {
+      await initDB();
+    }
+    
+    if (!db || !db.objectStoreNames.contains(AI_SECRETARIES_STORE)) {
+      console.log('AI 비서 저장소가 없음, 강제 초기화 시도');
+      await forceInitDB();
+    }
+
+    if (!db || !db.objectStoreNames.contains(AI_SECRETARIES_STORE)) {
+      throw new Error('AI 비서 저장소를 찾을 수 없습니다.');
+    }
+
+    console.log('AI 비서 삭제 시도, ID:', id);
+    const transaction = db!.transaction([AI_SECRETARIES_STORE], 'readwrite');
+    const store = transaction.objectStore(AI_SECRETARIES_STORE);
+    return new Promise((resolve, reject) => {
+      const request = store.delete(id);
+      request.onsuccess = () => {
+        console.log('AI 비서 삭제 성공, ID:', id);
+        resolve();
+      };
+      request.onerror = () => {
+        console.error('AI 비서 삭제 실패, ID:', id, '오류:', request.error);
+        reject(request.error);
+      };
+    });
+  } catch (error) {
+    console.error('AI 비서 삭제 중 예외 발생:', error);
+    throw error;
+  }
 };

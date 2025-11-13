@@ -1,28 +1,52 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import Editor from './components/Editor';
-import ClipboardPage from './components/UI/shared/ClipboardPage';
-import WorkspacePage from './components/WorkspacePage';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Dashboard from './components/Dashboard';
+import Workspace from './components/Workspace';
+import ClipboardPage from './components/ui/shared/ClipboardPage';
 import StoragePage from './components/StoragePage';
 import Settings from './components/Settings';
 import ImageEditor from './components/tools/ImageEditor';
-import Sidebar from './components/layout/Sidebar';
-import { getAllDocuments, initDB, deleteDocument, Document } from './utils/db';
+import AISecretaryCreator from './components/AISecretaryCreator';
+import AISecretaryManager from './components/AISecretaryManager';
+import AIAssistantPage from './components/AIAssistantPage';
+import Taskbar from './components/layout/Taskbar';
+import Menubar from './components/layout/Menubar';
+import { initDB } from './utils/db';
 import { Toaster } from 'react-hot-toast';
+import LandingPage from './components/LandingPage';
 import './App.css';
 
 function App() {
   return (
     <Router>
-      <AppContent />
+      <Routes>
+        <Route path="/landing" element={<LandingPage />} />
+        <Route path="/*" element={<AppContent />} />
+      </Routes>
     </Router>
   );
 }
 
 function AppContent() {
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [isDirty, setIsDirty] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMenubarHidden, setIsMenubarHidden] = useState(() => {
+    const saved = localStorage.getItem('isMenubarHidden');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [isMenubarHoveredWhileHidden, setIsMenubarHoveredWhileHidden] = useState(false);
+  const [isMenubarVisible, setIsMenubarVisible] = useState(() => {
+    const saved = localStorage.getItem('isMenubarHidden');
+    const hidden = saved ? JSON.parse(saved) : false;
+    return !hidden;
+  });
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('isRightSidebarOpen');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('rightSidebarWidth');
+    return saved ? parseInt(saved) : 320;
+  });
+  const [isResizingRight, setIsResizingRight] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('isDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -31,13 +55,89 @@ function AppContent() {
     const saved = localStorage.getItem('language');
     return (saved === 'ko' || saved === 'en') ? saved : 'ko';
   });
-  const editorRef = useRef<{ handleSave: () => void } | null>(null);
-  const navigate = useNavigate();
+  const [isCompactLayout, setIsCompactLayout] = useState(() => {
+    const saved = localStorage.getItem('isCompactLayout');
+    return saved ? JSON.parse(saved) : true; // 기본값: 컴팩트(여백 없음)
+  });
+  const [selectionPreview, setSelectionPreview] = useState<string | null>(null);
+  const [selectionRange, setSelectionRange] = useState<{ from: number; to: number } | null>(null);
+  const workspaceApiRef = React.useRef<{
+    replaceSelection?: (text: string) => void;
+    highlightSelection?: (from: number, to: number) => void;
+    clearHighlight?: () => void;
+  } | null>(null);
+
+  const onRegisterApi = React.useCallback((api: typeof workspaceApiRef.current) => {
+    console.log('App: onRegisterApi called', api);
+    workspaceApiRef.current = api;
+  }, []);
+
+  const onSelectionPreviewChange = React.useCallback((preview: string | null) => {
+    setSelectionPreview(preview);
+  }, []);
+
+  const onSelectionRangeChange = React.useCallback((range: { from: number; to: number } | null) => {
+    setSelectionRange(range);
+  }, []);
+
+  // 메뉴바 숨김 상태 동기화
+  useEffect(() => {
+    const handleMenubarHiddenChange = () => {
+      const saved = localStorage.getItem('isMenubarHidden');
+      if (saved) {
+        setIsMenubarHidden(JSON.parse(saved));
+      }
+    };
+
+    window.addEventListener('storage', handleMenubarHiddenChange);
+    // 초기 상태 체크
+    const interval = setInterval(() => {
+      const saved = localStorage.getItem('isMenubarHidden');
+      if (saved) {
+        const newValue = JSON.parse(saved);
+        if (newValue !== isMenubarHidden) {
+          setIsMenubarHidden(newValue);
+        }
+      }
+    }, 100);
+
+    return () => {
+      window.removeEventListener('storage', handleMenubarHiddenChange);
+      clearInterval(interval);
+    };
+  }, [isMenubarHidden]);
+
+  // Keep menubarVisible in sync with hidden/hover state in case other tabs change localStorage
+  useEffect(() => {
+    setIsMenubarVisible(!isMenubarHidden || isMenubarHoveredWhileHidden);
+  }, [isMenubarHidden, isMenubarHoveredWhileHidden]);
+
+  // 우측 사이드바 너비 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('rightSidebarWidth', rightSidebarWidth.toString());
+  }, [rightSidebarWidth]);
+
+  // 우측 사이드바 상태 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('isRightSidebarOpen', JSON.stringify(isRightSidebarOpen));
+  }, [isRightSidebarOpen]);
 
     useEffect(() => {
-    initDB();
-    loadDocuments();
-    // API 키 테스트 제거 - 실제 사용 시 에러 처리
+    const initializeDB = async () => {
+      try {
+        await initDB();
+      } catch (error) {
+        console.error('App: DB 초기화 실패:', error);
+        // 재시도
+        try {
+          await initDB();
+        } catch (retryError) {
+          console.error('App: DB 재초기화도 실패:', retryError);
+        }
+      }
+    };
+    
+    initializeDB();
   }, []); // language 의존성 제거 - API 테스트는 한 번만 실행
 
   useEffect(() => {
@@ -54,96 +154,261 @@ function AppContent() {
     localStorage.setItem('language', language);
   }, [language]);
 
+  // Save layout preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('isCompactLayout', JSON.stringify(isCompactLayout));
+  }, [isCompactLayout]);
+
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
   };
 
-  const loadDocuments = async () => {
-    const docs = await getAllDocuments();
-    // Sort by updatedAt in descending order (most recent first)
-    const sortedDocs = docs.sort((a, b) => {
-      const dateA = new Date(a.updatedAt).getTime();
-      const dateB = new Date(b.updatedAt).getTime();
-      return dateB - dateA;
-    });
-    setDocuments(sortedDocs);
+  const toggleLayout = () => {
+    setIsCompactLayout(!isCompactLayout);
   };
 
-  const handleSave = (doc: Document) => {
-    loadDocuments(); // Refresh the list
+  const clearSelection = () => {
+    setSelectionPreview(null);
+    setSelectionRange(null);
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm(language === 'ko' ? '정말로 이 문서를 삭제하시겠습니까?' : 'Are you sure you want to delete this document?')) {
-      await deleteDocument(id);
-      loadDocuments();
-    }
+  const openTaskbar = () => {
+    setIsRightSidebarOpen(true);
   };
 
-  const handleRenameStart = (doc: Document) => {
-    // 문서 이름 변경 로직은 WorkspacePage에서 처리하므로 여기서는 빈 함수로 정의
-    console.log('Rename document:', doc);
+  // 우측 사이드바 리사이저 핸들러
+  const handleRightMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingRight(true);
   };
 
-    const createNewDocument = () => {
-    if (isDirty) {
-      const save = window.confirm(language === 'ko' ? '저장되지 않은 변경사항이 있습니다. 새 문서를 만들기 전에 저장하시겠습니까?' : 'You have unsaved changes. Do you want to save before creating a new document?');
-      if (save) {
-        editorRef.current?.handleSave();
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizingRight) {
+        const minWidth = 250;
+        const maxWidth = 800;
+        const newWidth = window.innerWidth - e.clientX;
+
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+          setRightSidebarWidth(newWidth);
+        }
       }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingRight(false);
+    };
+
+    if (isResizingRight) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
     }
-    navigate('/documents');
-  };
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingRight]);
 
   return (
-    <div className="min-h-screen p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
-      <header className="text-center mb-8 text-gray-900 dark:text-gray-100 relative z-10">
-        <div className="flex justify-between items-center max-w-6xl mx-auto">
-          <h1 className="text-5xl font-extrabold m-0 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-purple-400 tracking-tight">
-            {language === 'ko' ? 'AI 워크스페이스' : 'AI Workspace'}
-          </h1>
-        </div>
-      </header>
-      <div className={`grid gap-6 h-[calc(100vh-140px)] transition-all duration-300 ${
-        isSidebarOpen ? 'grid-cols-[320px_1fr]' : 'grid-cols-[80px_1fr]'
-      }`}>
-        <Sidebar
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-          language={language}
-          documents={documents}
-          createNewDocument={createNewDocument}
-          handleRenameStart={handleRenameStart}
-          handleDelete={handleDelete}
-        />
-
-        <main className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 backdrop-blur-xl overflow-y-auto flex flex-col scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
-          <Routes>
-            <Route path="/" element={<Navigate to="/workspace" replace />} />
-            <Route path="/documents" element={<Editor ref={editorRef} onSave={handleSave} onDirtyChange={setIsDirty} />} />
-            <Route path="/documents/:id" element={<Editor ref={editorRef} onSave={handleSave} onDirtyChange={setIsDirty} />} />
-            <Route path="/clipboard" element={<ClipboardPage />} />
-            <Route path="/storage" element={<StoragePage />} />
-            <Route path="/image-editor" element={<ImageEditor />} />
-            <Route path="/workspace" element={<WorkspacePage onDocumentSelect={(id) => {
-              if (id === 'new') {
-                // 새 문서 만들기 로직
-                navigate('/documents');
-              } else {
-                navigate(`/documents/${id}`);
-              }
-            }} />} />
-            <Route path="/settings" element={
-              <Settings
-                isDarkMode={isDarkMode}
-                onToggleTheme={toggleTheme}
-                language={language}
-                onLanguageChange={setLanguage}
+    <div className={`flex h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 transition-colors ${isCompactLayout ? '' : 'p-4 gap-4'}`}>
+      
+      {/* 좌측 메뉴바 */}
+      <Menubar 
+        isDarkMode={isDarkMode}
+        language={language}
+        isCompactLayout={isCompactLayout}
+        onHoverChange={setIsMenubarHoveredWhileHidden}
+        onVisibleChange={setIsMenubarVisible}
+      />
+      
+      {/* 우측 상단 고정 토글 버튼 */}
+      {!isRightSidebarOpen && (
+        <button
+          onClick={() => setIsRightSidebarOpen(true)}
+          className="fixed top-6 right-10 z-50 p-1 bg-transparent hover:bg-transparent transition-none"
+          title="AI 채팅 열기"
+          aria-label="Open AI chat"
+        >
+          <svg
+            className="w-6 h-6 text-gray-700 dark:text-gray-300"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+          </svg>
+        </button>
+      )}
+      
+      {/* 메인 컨텐츠 영역 */}
+      <div 
+        className="flex-1 flex flex-col overflow-hidden transition-all duration-300"
+        style={{ 
+          // When not compact layout we inset the menubar by 16px; account for that in main content margin
+          marginLeft: isMenubarVisible ? (isCompactLayout ? '80px' : '96px') : '0',
+          marginRight: isRightSidebarOpen ? `${rightSidebarWidth}px` : '0',
+          transition: 'margin 300ms ease-in-out'
+        }}
+      >
+        {/* 메인 컨텐츠 */}
+        <main className="flex-1 overflow-hidden">
+          <div className={`h-full bg-white dark:bg-gray-900 overflow-hidden transition-shadow duration-300 ${isCompactLayout ? '' : 'rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/5 z-40'}`}>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard isDarkMode={isDarkMode} />} />
+              <Route
+                path="/workspace"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
+                  />
+                }
               />
-            } />
-          </Routes>
+              <Route
+                path="/workspace/upload"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
+                  />
+                }
+              />
+              <Route
+                path="/workspace/:id"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
+                  />
+                }
+              />
+              <Route
+                path="/documents"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
+                  />
+                }
+              />
+              <Route
+                path="/documents/:id"
+                element={
+                  <Workspace
+                    isDarkMode={isDarkMode}
+                    onSelectionPreviewChange={onSelectionPreviewChange}
+                    onSelectionRangeChange={onSelectionRangeChange}
+                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onRegisterApi={onRegisterApi}
+                    isRightSidebarOpen={isRightSidebarOpen}
+                    rightSidebarWidth={rightSidebarWidth}
+                  />
+                }
+              />
+              <Route path="/clipboard" element={<ClipboardPage />} />
+              <Route path="/storage" element={<StoragePage />} />
+              <Route 
+                path="/settings" 
+                element={
+                  <Settings 
+                    isDarkMode={isDarkMode} 
+                    onToggleTheme={toggleTheme}
+                    language={language}
+                    onLanguageChange={setLanguage}
+                    isMenubarHidden={isMenubarHidden}
+                    onToggleMenubar={() => setIsMenubarHidden(!isMenubarHidden)}
+                    isCompactLayout={isMenubarHidden}
+                    onToggleLayout={toggleLayout}
+                  />
+                } 
+              />
+              <Route path="/image-editor" element={<ImageEditor />} />
+              <Route path="/ai-secretary" element={<AISecretaryManager />} />
+              <Route path="/ai-secretary/create" element={<AISecretaryCreator />} />
+              <Route path="/ai-assistant" element={<AIAssistantPage />} />
+            </Routes>
+          </div>
         </main>
       </div>
+      
+      {/* 우측 사이드바 - 최상위 레벨 */}
+      <Taskbar
+        isRightSidebarOpen={isRightSidebarOpen}
+        rightSidebarWidth={rightSidebarWidth}
+        isResizingRight={isResizingRight}
+        onClose={() => {
+          setIsRightSidebarOpen(false);
+        }}
+        onMouseDown={handleRightMouseDown}
+        selectionPreview={selectionPreview}
+        selectionRange={selectionRange}
+        onClearSelection={() => {
+          // Clear App-level selection state and also clear editor highlight if present
+          console.log('App: onClearSelection called, workspaceApiRef =', workspaceApiRef.current);
+          console.log('App: Before clearSelection, selectionPreview =', selectionPreview);
+          clearSelection();
+          console.log('App: After clearSelection, selectionPreview =', selectionPreview);
+          try {
+            workspaceApiRef.current?.clearHighlight?.();
+            console.log('App: clearHighlight called successfully');
+          } catch (e) {
+            console.error('App: clearHighlight call failed', e);
+          }
+        }}
+        onReplaceSelection={(newText: string) => {
+          console.log('App: onReplaceSelection called, workspaceApiRef =', workspaceApiRef.current, 'newText=', newText);
+          // Ask the workspace/editor to replace the selected text
+          try {
+            workspaceApiRef.current?.replaceSelection?.(newText);
+          } catch (e) {
+            console.error('App: replaceSelection call failed', e);
+          }
+          // Clear selection state in App and hide highlight
+          clearSelection();
+          try {
+            workspaceApiRef.current?.clearHighlight?.();
+          } catch (e) {
+            console.error('App: clearHighlight call failed', e);
+          }
+        }}
+        onHighlightSelection={(from: number, to: number) => {
+          console.log('App: onHighlightSelection called', { from, to, api: workspaceApiRef.current });
+          try {
+            workspaceApiRef.current?.highlightSelection?.(from, to);
+          } catch (e) {
+            console.error('App: highlightSelection call failed', e);
+          }
+        }}
+        onClearHighlight={() => {
+          workspaceApiRef.current?.clearHighlight?.();
+        }}
+      />
       <Toaster
         position="bottom-right"
         toastOptions={{

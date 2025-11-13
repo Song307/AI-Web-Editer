@@ -199,6 +199,40 @@ code {
   color: #60a5fa; /* blue-400 */
 }
 
+/* Force tables inside the editor to fill available width and show clear grid lines */
+.ProseMirror table,
+.not-prose table {
+  width: 100% !important;
+  table-layout: auto; /* allow columns to size naturally and fill width */
+  border-collapse: collapse;
+}
+
+.ProseMirror th,
+.ProseMirror td,
+.not-prose th,
+.not-prose td {
+  border: 1px solid #e5e7eb; /* gray-200 */
+  padding: 0.75rem; /* match tailwind px-4 py-3-ish */
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.ProseMirror td,
+.ProseMirror th { min-width: 0; }
+
+.dark .ProseMirror th,
+.dark .ProseMirror td,
+.dark .not-prose th,
+.dark .not-prose td {
+  border-color: #374151; /* gray-700 */
+}
+
+.ProseMirror thead th,
+.not-prose thead th {
+  background-color: #f8fafc; /* gray-50 */
+}
+
+
 .dark .ProseMirror a:hover {
   color: #3b82f6; /* blue-500 */
 }
@@ -253,4 +287,90 @@ code {
 
 .dark .slash-menu-scroll::-webkit-scrollbar-thumb:hover {
   background: #6b7280;
+}
+
+/* 툴팁 스타일 */
+.tooltip-container {
+  position: relative;
+}
+
+.tooltip-container .tooltip-text {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  background-color: #1f2937;
+  color: #ffffff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  margin-bottom: 8px;
+}
+
+.tooltip-container .tooltip-text::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -4px;
+  border-width: 4px;
+  border-style: solid;
+  border-color: #1f2937 transparent transparent transparent;
+}
+
+.tooltip-container:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+.dark .tooltip-container .tooltip-text {
+  background-color: #374151;
+}
+
+.dark .tooltip-container .tooltip-text::after {
+  border-color: #374151 transparent transparent transparent;
+}
+
+/* 상단 툴팁 스타일 (헤더 메뉴용) */
+.tooltip-container.tooltip-top .tooltip-text {
+  top: 100%;
+  bottom: auto;
+  transform: translateX(-50%) translateY(4px);
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.tooltip-container.tooltip-top .tooltip-text::after {
+  top: auto;
+  bottom: 100%;
+  border-color: transparent transparent #1f2937 transparent;
+}
+
+.tooltip-container.tooltip-top:hover .tooltip-text {
+  transform: translateX(-50%) translateY(8px);
+}
+
+.dark .tooltip-container.tooltip-top .tooltip-text::after {
+  border-color: transparent transparent #374151 transparent;
+}
+
+/* 메뉴바 텍스트 슬라이드 인 애니메이션 */
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }

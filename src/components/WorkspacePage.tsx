@@ -5,12 +5,11 @@ import { getAllDocuments, deleteDocument, updateDocument, Document, getAllImages
 import PDFViewer from './tools/PDFViewer';
 import ImageViewer from './tools/ImageViewer';
 import VideoPlayer from './tools/VideoPlayer';
-import RenameModal from './UI/shared/RenameModal';
-import ConfirmModal from './UI/shared/ConfirmModal';
-import ContextMenu, { ContextMenuItem } from './UI/shared/ContextMenu';
-import Modal from './UI/shared/Modal';
-import ModalHeader from './UI/shared/ModalHeader';
-import ModalToolbar from './UI/shared/ModalToolbar';
+import RenameModal from './ui/shared/RenameModal';
+import ConfirmModal from './ui/shared/ConfirmModal';
+import Modal from './ui/shared/Modal';
+import ModalHeader from './ui/shared/ModalHeader';
+import ModalToolbar from './ui/shared/ModalToolbar';
 import './WorkspacePage.css';
 
 interface WorkspacePageProps {
@@ -41,13 +40,71 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
   const [selectedPdf, setSelectedPdf] = useState<PDFFile | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoFile | null>(null);
   const [confirmState, setConfirmState] = useState<{ open: boolean; id?: string; type?: 'document' | 'image' | 'pdf' | 'video' }>({ open: false });
-  const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; target?: any; anchorRect?: { left: number; right: number; top: number; bottom: number; width: number; height: number } | null }>({ open: false, x: 0, y: 0, anchorRect: null });
+  const [dropdownMenu, setDropdownMenu] = useState<{ open: boolean; item?: any; type?: 'document' | 'image' | 'pdf' | 'video'; position?: { x: number; y: number } }>({ open: false });
   const pdfViewerRef = useRef<any>(null);
   const pdfModalRef = useRef<HTMLDivElement>(null);
 
   // 이미지 뷰어 닫을 때 상태 초기화
   const closeImageViewer = () => {
     setSelectedImage(null);
+  };
+
+  const openDropdownMenu = (item: any, type: 'document' | 'image' | 'pdf' | 'video', event: React.MouseEvent) => {
+    event.stopPropagation();
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    setDropdownMenu({
+      open: true,
+      item,
+      type,
+      position: { x: rect.left, y: rect.bottom + 4 }
+    });
+  };
+
+  const closeDropdownMenu = () => {
+    setDropdownMenu({ open: false });
+  };
+
+  const handleAction = (action: 'open' | 'rename' | 'delete') => {
+    const { item, type } = dropdownMenu;
+    if (!item || !type) return;
+
+    closeDropdownMenu();
+
+    switch (action) {
+      case 'open':
+        if (type === 'document') {
+          onDocumentSelect?.(item.id);
+        } else if (type === 'image') {
+          handleImageView(item);
+        } else if (type === 'pdf') {
+          handlePdfView(item);
+        } else if (type === 'video') {
+          handleVideoView(item);
+        }
+        break;
+      case 'rename':
+        if (type === 'document') {
+          handleRenameStart(item);
+        } else if (type === 'image') {
+          handleRenameImageStart(item);
+        } else if (type === 'pdf') {
+          handleRenamePdfStart(item);
+        } else if (type === 'video') {
+          handleRenameVideoStart(item);
+        }
+        break;
+      case 'delete':
+        if (type === 'document') {
+          handleDelete(item.id, 'document');
+        } else if (type === 'image') {
+          handleImageDelete(item.id);
+        } else if (type === 'pdf') {
+          handlePdfDelete(item.id);
+        } else if (type === 'video') {
+          handleVideoDelete(item.id);
+        }
+        break;
+    }
   };
 
   // 동영상 뷰어 닫을 때 상태 초기화
@@ -61,6 +118,27 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
     loadPdfs();
     loadVideos();
   }, []);
+
+  // 드롭다운 메뉴 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownMenu.open) {
+        const target = event.target as HTMLElement;
+        // 드롭다운 메뉴 내부 클릭이 아닌 경우에만 닫기
+        if (!target.closest('.dropdown-menu')) {
+          closeDropdownMenu();
+        }
+      }
+    };
+
+    if (dropdownMenu.open) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownMenu.open]);
 
   const loadDocuments = async () => {
     try {
@@ -334,8 +412,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
     setSelectedVideo(video);
   };
 
-  const closeContextMenu = () => setContextMenu({ open: false, x: 0, y: 0, anchorRect: null });
-
   // 파일들을 폴더별로 그룹화하는 함수
   const groupFilesByFolder = (files: any[]) => {
     const folderMap = new Map<string, any[]>();
@@ -435,65 +511,6 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ onDocumentSelect }) => {
     setShowNewFolderModal(false);
     setNewFolderName('');
     toast.success(`새 폴더 "${newFolderName}"가 생성되었습니다.`);
-  };
-
-  const openContextForItem = (e: React.MouseEvent, item: any) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // 버튼 요소를 정확하게 찾기
-    const button = e.currentTarget as HTMLElement;
-    if (!button) return;
-
-const rect = button.getBoundingClientRect();
-
-// 조정하기 쉬운 값들 — 원하는 수치로 바꿔서 테스트하세요
-const estimatedMenuWidth = 150; // ContextMenu의 min width와 일치시키면 좋음
-const offsetX = -300;   // +이면 오른쪽으로, -이면 왼쪽으로 이동
-const offsetY = -100;   // +이면 아래로, -이면 위로 이동
-
-// 가운데 정렬 기반 (기존 방식)
-const x = rect.left + (rect.width / 2) - (estimatedMenuWidth / 2) + offsetX;
-const y = rect.bottom + offsetY;
-
-setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height } });
-  };
-
-
-  const getContextMenuItems = (target: any): ContextMenuItem[] => {
-    if (!target || !target.item) return [];
-    const item = target.item;
-    const type = target.type;
-
-    if (type === 'document' || item.content !== undefined) {
-      return [
-        { label: '열기', onClick: () => onDocumentSelect?.(item.id) },
-        { label: '이름 변경', onClick: () => handleRenameStart(item) },
-        { label: '삭제', onClick: () => handleDelete(item.id), danger: true },
-      ];
-    }
-    if (type === 'image' || item.data) {
-      return [
-        { label: '보기', onClick: () => handleImageView(item) },
-        { label: '이름 변경', onClick: () => handleRenameImageStart(item) },
-        { label: '삭제', onClick: () => handleImageDelete(item.id), danger: true },
-      ];
-    }
-    if (type === 'pdf') {
-      return [
-        { label: '보기', onClick: () => handlePdfView(item) },
-        { label: '이름 변경', onClick: () => handleRenamePdfStart(item) },
-        { label: '삭제', onClick: () => handlePdfDelete(item.id), danger: true },
-      ];
-    }
-    if (type === 'video') {
-      return [
-        { label: '보기', onClick: () => handleVideoView(item) },
-        { label: '이름 변경', onClick: () => handleRenameVideoStart(item) },
-        { label: '삭제', onClick: () => handleVideoDelete(item.id), danger: true },
-      ];
-    }
-    return [];
   };
 
   const handleRenameStart = (doc: Document) => {
@@ -846,10 +863,7 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
           {/* Hover Actions */}
           <div className="document-actions absolute top-2 right-2 flex gap-1 opacity-100 transition-opacity duration-200">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                openContextForItem(e, { type: 'document', item: doc });
-              }}
+              onClick={(e) => openDropdownMenu(doc, 'document', e)}
               className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
               title="옵션"
             >
@@ -906,10 +920,7 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
           {/* Actions */}
           <div className="flex gap-1">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                openContextForItem(e, { type: 'document', ...doc });
-              }}
+              onClick={(e) => openDropdownMenu(doc, 'document', e)}
               className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded cursor-pointer"
               title="옵션"
             >
@@ -1127,10 +1138,6 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
                     {/* Hover Actions */}
                     <div className="file-actions absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openContextForItem(e, item);
-                        }}
                         className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
                         title="옵션"
                       >
@@ -1196,10 +1203,6 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
                     {/* Actions */}
                     <div className="flex gap-1">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openContextForItem(e, item);
-                        }}
                         className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-gray-700"
                         title="옵션"
                       >
@@ -1282,10 +1285,6 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
                             {/* 액션 버튼들 */}
                             <div style={{ display: 'flex', gap: '4px' }}>
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openContextForItem(e, item);
-                                }}
                                 className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                 title="옵션"
                               >
@@ -1377,10 +1376,7 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
                       transition: 'opacity 0.2s ease'
                     }}>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openContextForItem(e, { type: 'image', item: img });
-                        }}
+                        onClick={(e) => openDropdownMenu(img, 'image', e)}
                         className="p-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                         title="옵션"
                       >
@@ -1455,10 +1451,7 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
                     {/* Actions */}
                     <div style={{ display: 'flex', gap: '4px' }}>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openContextForItem(e, { type: 'image', item: img });
-                        }}
+                        onClick={(e) => openDropdownMenu(img, 'image', e)}
                         style={{
                           padding: '4px',
                           background: 'none',
@@ -1533,10 +1526,7 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
                     {/* Hover Actions */}
                     <div className="video-actions absolute top-2 right-2 flex gap-1 opacity-100 transition-opacity duration-200">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openContextForItem(e, { type: 'video', item: video });
-                        }}
+                        onClick={(e) => openDropdownMenu(video, 'video', e)}
                         className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
                         title="옵션"
                       >
@@ -1610,10 +1600,7 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
                     {/* Actions */}
                     <div className="flex gap-2">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openContextForItem(e, { type: 'video', item: video });
-                        }}
+                        onClick={(e) => openDropdownMenu(video, 'video', e)}
                         className="p-1 text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                         title="옵션"
                       >
@@ -1681,10 +1668,7 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
                     {/* Hover Actions */}
                     <div className="pdf-actions absolute top-2 right-2 flex gap-1 opacity-100 transition-opacity duration-200">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openContextForItem(e, { type: 'pdf', item: pdf });
-                        }}
+                        onClick={(e) => openDropdownMenu(pdf, 'pdf', e)}
                         className="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 cursor-pointer flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700"
                         title="옵션"
                       >
@@ -1759,10 +1743,7 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
                     {/* Actions */}
                     <div className="flex gap-1">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openContextForItem(e, { type: 'pdf', item: pdf });
-                        }}
+                        onClick={(e) => openDropdownMenu(pdf, 'pdf', e)}
                         className="p-1 bg-transparent border-none text-gray-600 dark:text-gray-400 cursor-pointer rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                         title="옵션"
                       >
@@ -1868,8 +1849,8 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
 
       {/* Modals */}
       <RenameModal
-        isOpen={!!renamingDocument || !!renamingImage || !!renamingPdf}
-        title={renamingDocument ? '문서 이름 변경' : renamingImage ? '이미지 이름 변경' : renamingPdf ? 'PDF 이름 변경' : '이름 변경'}
+        isOpen={!!renamingDocument || !!renamingImage || !!renamingPdf || !!renamingVideo}
+        title={renamingDocument ? '문서 이름 변경' : renamingImage ? '이미지 이름 변경' : renamingPdf ? 'PDF 이름 변경' : renamingVideo ? '비디오 이름 변경' : '이름 변경'}
         label={'새 이름'}
         placeholder={'새 이름을 입력하세요'}
         value={newTitle}
@@ -1878,12 +1859,14 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
           if (renamingDocument) setRenamingDocument(null);
           if (renamingImage) setRenamingImage(null);
           if (renamingPdf) setRenamingPdf(null);
+          if (renamingVideo) setRenamingVideo(null);
           setNewTitle('');
         }}
         onConfirm={() => {
           if (renamingDocument) return handleRenameConfirm();
           if (renamingImage) return handleRenameImageConfirm();
           if (renamingPdf) return handleRenamePdfConfirm();
+          if (renamingVideo) return handleRenameVideoConfirm();
         }}
         confirmText={'확인'}
         cancelText={'취소'}
@@ -1898,6 +1881,40 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
         onConfirm={confirmDelete}
         onCancel={() => setConfirmState({ open: false })}
       />
+
+      {/* Dropdown Menu */}
+      {dropdownMenu.open && dropdownMenu.item && dropdownMenu.position && (
+        <div
+          className="dropdown-menu fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-2 min-w-[160px]"
+          style={{
+            left: dropdownMenu.position.x,
+            top: dropdownMenu.position.y,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => handleAction('open')}
+            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-3 transition-colors"
+          >
+            <FileText size={16} className="text-blue-600 dark:text-blue-400" />
+            열기
+          </button>
+          <button
+            onClick={() => handleAction('rename')}
+            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-3 transition-colors"
+          >
+            <ArrowRepeat size={16} className="text-yellow-600 dark:text-yellow-400" />
+            이름 변경
+          </button>
+          <button
+            onClick={() => handleAction('delete')}
+            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3 transition-colors"
+          >
+            <X size={16} className="text-red-600 dark:text-red-400" />
+            삭제
+          </button>
+        </div>
+      )}
 
       <RenameModal
         title="새 폴더 만들기"
@@ -1914,22 +1931,6 @@ setContextMenu({ open: true, x, y, target: item, anchorRect: { left: rect.left, 
           setNewFolderName('');
         }}
       />
-
-      {contextMenu.open && (
-        <div
-          onClick={closeContextMenu}
-          onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}
-          style={{ position: 'fixed', inset: 0, zIndex: 999998 }}
-        >
-          <ContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            anchorRect={contextMenu.anchorRect}
-            items={getContextMenuItems(contextMenu.target)}
-            onClose={closeContextMenu}
-          />
-        </div>
-      )}
 
     </div>
   );
