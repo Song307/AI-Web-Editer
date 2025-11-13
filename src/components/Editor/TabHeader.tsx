@@ -66,6 +66,7 @@ const TabHeader: React.FC<TabHeaderProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                console.log('X button clicked for tab:', tab.id);
                 onCloseTab(tab.id, e);
               }}
               className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-all"

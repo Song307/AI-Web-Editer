@@ -77,14 +77,29 @@ export interface EditedImageFile {
   updatedAt: string; // ISO string
 }
 
+export interface AIMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+export interface AIConversation {
+  id: string;
+  title: string;
+  messages: AIMessage[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 
 const DB_NAME = 'AITextEditorDB';
-const DB_VERSION = 12; // 버전 올림 - 브라우저에 이미 버전 12가 존재
+const DB_VERSION = 13; // 버전 올림 - AI 대화 세션 추가
 const DOCUMENTS_STORE = 'documents';
 const IMAGES_STORE = 'images';
 const PDFS_STORE = 'pdfs';
 const VIDEOS_STORE = 'videos';
 const AI_SECRETARIES_STORE = 'aiSecretaries';
+const AI_CONVERSATIONS_STORE = 'aiConversations';
 
 let db: IDBDatabase | null = null;
 
@@ -227,6 +242,15 @@ export const initDB = (): Promise<void> => {
         aiSecretaryStore.createIndex('name', 'name', { unique: false });
         aiSecretaryStore.createIndex('createdAt', 'createdAt', { unique: false });
   // AI 비서 저장소 생성됨 (로그 제거)
+      }
+
+      // AI 대화 저장소 (신규)
+      if (!upgradeDb.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+        const aiConversationStore = upgradeDb.createObjectStore(AI_CONVERSATIONS_STORE, { keyPath: 'id' });
+        aiConversationStore.createIndex('title', 'title', { unique: false });
+        aiConversationStore.createIndex('createdAt', 'createdAt', { unique: false });
+        aiConversationStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+  // AI 대화 저장소 생성됨 (로그 제거)
       }
 
   // 데이터베이스 업그레이드 완료 (로그 제거)
@@ -772,6 +796,166 @@ export const deleteAISecretary = async (id: string): Promise<void> => {
     });
   } catch (error) {
     console.error('AI 비서 삭제 중 예외 발생:', error);
+    throw error;
+  }
+};
+
+// AI 대화 저장
+export const saveAIConversation = async (conversation: AIConversation): Promise<void> => {
+  try {
+    if (!db) {
+      await initDB();
+    }
+    
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      await forceInitDB();
+    }
+
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      throw new Error('AI 대화 저장소를 찾을 수 없습니다.');
+    }
+
+    const transaction = db.transaction([AI_CONVERSATIONS_STORE], 'readwrite');
+    const store = transaction.objectStore(AI_CONVERSATIONS_STORE);
+    return new Promise((resolve, reject) => {
+      const request = store.put(conversation);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('AI 대화 저장 중 예외 발생:', error);
+    throw error;
+  }
+};
+
+// 모든 AI 대화 가져오기 (최근순)
+export const getAIConversations = async (): Promise<AIConversation[]> => {
+  try {
+    if (!db) {
+      await initDB();
+    }
+    
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      await forceInitDB();
+    }
+
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      throw new Error('AI 대화 저장소를 찾을 수 없습니다.');
+    }
+
+    const transaction = db.transaction([AI_CONVERSATIONS_STORE], 'readonly');
+    const store = transaction.objectStore(AI_CONVERSATIONS_STORE);
+    const index = store.index('updatedAt');
+    return new Promise((resolve, reject) => {
+      const request = index.openCursor(null, 'prev'); // 역순으로 가져오기 (최근순)
+      const results: AIConversation[] = [];
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('AI 대화 목록 가져오기 중 예외 발생:', error);
+    throw error;
+  }
+};
+
+// 특정 AI 대화 가져오기
+export const getAIConversation = async (id: string): Promise<AIConversation | null> => {
+  try {
+    if (!db) {
+      await initDB();
+    }
+    
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      await forceInitDB();
+    }
+
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      throw new Error('AI 대화 저장소를 찾을 수 없습니다.');
+    }
+
+    const transaction = db.transaction([AI_CONVERSATIONS_STORE], 'readonly');
+    const store = transaction.objectStore(AI_CONVERSATIONS_STORE);
+    return new Promise((resolve, reject) => {
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('AI 대화 가져오기 중 예외 발생:', error);
+    throw error;
+  }
+};
+
+// AI 대화 업데이트
+export const updateAIConversation = async (id: string, updates: Partial<AIConversation>): Promise<void> => {
+  try {
+    if (!db) {
+      await initDB();
+    }
+    
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      await forceInitDB();
+    }
+
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      throw new Error('AI 대화 저장소를 찾을 수 없습니다.');
+    }
+
+    const transaction = db.transaction([AI_CONVERSATIONS_STORE], 'readwrite');
+    const store = transaction.objectStore(AI_CONVERSATIONS_STORE);
+    return new Promise((resolve, reject) => {
+      const getRequest = store.get(id);
+      getRequest.onsuccess = () => {
+        const conversation = getRequest.result;
+        if (conversation) {
+          const updatedConversation = { ...conversation, ...updates, updatedAt: new Date() };
+          const putRequest = store.put(updatedConversation);
+          putRequest.onsuccess = () => resolve();
+          putRequest.onerror = () => reject(putRequest.error);
+        } else {
+          reject(new Error('AI 대화 not found'));
+        }
+      };
+      getRequest.onerror = () => reject(getRequest.error);
+    });
+  } catch (error) {
+    console.error('AI 대화 업데이트 중 예외 발생:', error);
+    throw error;
+  }
+};
+
+// AI 대화 삭제
+export const deleteAIConversation = async (id: string): Promise<void> => {
+  try {
+    if (!db) {
+      await initDB();
+    }
+    
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      await forceInitDB();
+    }
+
+    if (!db || !db.objectStoreNames.contains(AI_CONVERSATIONS_STORE)) {
+      throw new Error('AI 대화 저장소를 찾을 수 없습니다.');
+    }
+
+    const transaction = db.transaction([AI_CONVERSATIONS_STORE], 'readwrite');
+    const store = transaction.objectStore(AI_CONVERSATIONS_STORE);
+    return new Promise((resolve, reject) => {
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('AI 대화 삭제 중 예외 발생:', error);
     throw error;
   }
 };

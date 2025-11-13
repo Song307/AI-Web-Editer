@@ -51,6 +51,15 @@ function AppContent() {
     const saved = localStorage.getItem('isDarkMode');
     return saved ? JSON.parse(saved) : false;
   });
+  const [isFocusMode, setIsFocusMode] = useState(() => {
+    const saved = localStorage.getItem('isFocusMode');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  const [isTypewriterMode, setIsTypewriterMode] = useState(() => {
+    const saved = localStorage.getItem('isTypewriterMode');
+    return saved ? JSON.parse(saved) : false;
+  });
   const [language, setLanguage] = useState<'ko' | 'en'>(() => {
     const saved = localStorage.getItem('language');
     return (saved === 'ko' || saved === 'en') ? saved : 'ko';
@@ -149,6 +158,15 @@ function AppContent() {
     localStorage.setItem('isDarkMode', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
 
+  // Save focus/typewriter preferences
+  useEffect(() => {
+    localStorage.setItem('isFocusMode', JSON.stringify(isFocusMode));
+  }, [isFocusMode]);
+
+  useEffect(() => {
+    localStorage.setItem('isTypewriterMode', JSON.stringify(isTypewriterMode));
+  }, [isTypewriterMode]);
+
   // Save language preference to localStorage
   useEffect(() => {
     localStorage.setItem('language', language);
@@ -166,6 +184,9 @@ function AppContent() {
   const toggleLayout = () => {
     setIsCompactLayout(!isCompactLayout);
   };
+
+  const toggleFocusMode = () => setIsFocusMode((v: boolean) => !v);
+  const toggleTypewriterMode = () => setIsTypewriterMode((v: boolean) => !v);
 
   const clearSelection = () => {
     setSelectionPreview(null);
@@ -266,6 +287,8 @@ function AppContent() {
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
@@ -280,6 +303,8 @@ function AppContent() {
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
@@ -294,6 +319,8 @@ function AppContent() {
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
@@ -308,6 +335,8 @@ function AppContent() {
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
@@ -322,6 +351,8 @@ function AppContent() {
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
                     onOpenTaskbar={() => setIsRightSidebarOpen(true)}
@@ -345,6 +376,10 @@ function AppContent() {
                     onToggleMenubar={() => setIsMenubarHidden(!isMenubarHidden)}
                     isCompactLayout={isMenubarHidden}
                     onToggleLayout={toggleLayout}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
+                    onToggleFocusMode={toggleFocusMode}
+                    onToggleTypewriterMode={toggleTypewriterMode}
                   />
                 } 
               />

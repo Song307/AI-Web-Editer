@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Paperclip, X, Stars, Trash, Clipboard, ArrowsFullscreen, FileEarmarkPdf, Image as ImageIcon, Wrench, Chat, Code, Translate, FileText, Robot } from 'react-bootstrap-icons';
+import { Paperclip, X, Stars, Trash, Clipboard, ArrowsFullscreen, FileEarmarkPdf, Image as ImageIcon, Wrench, Chat, Code, Translate, FileText, Robot, ChevronDown, ThreeDots, Plus } from 'react-bootstrap-icons';
 import ReactMarkdown from 'react-markdown';
 import toast from 'react-hot-toast';
 import { generateAIResponse } from '../../utils/ai';
+import { saveAIConversation, getAIConversations, getAIConversation, updateAIConversation, deleteAIConversation, AIConversation, AIMessage } from '../../utils/db';
 
 interface Message {
-  role: 'user' | 'ai';
+  role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
   files?: UploadedFile[];
@@ -67,6 +68,9 @@ const Taskbar: React.FC<TaskbarProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'clipboard' | 'aiAssistant'>('aiAssistant');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [sessions, setSessions] = useState<AIConversation[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [showSessionDropdown, setShowSessionDropdown] = useState(false);
   const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([]);
   const [selectedClipboardItem, setSelectedClipboardItem] = useState<ClipboardItem | null>(null);
   const [editingItem, setEditingItem] = useState<ClipboardItem | null>(null);
@@ -103,12 +107,40 @@ const Taskbar: React.FC<TaskbarProps> = ({
       if (clipboardTabRef.current && !clipboardTabRef.current.contains(event.target as Node)) {
         setIsClipboardSelected(false);
       }
+      if (showSessionDropdown && !(event.target as Element).closest('.session-dropdown')) {
+        setShowSessionDropdown(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
+  }, []);
+
+  // 세션 목록 로드
+  useEffect(() => {
+    const loadSessions = async () => {
+      try {
+        const loadedSessions = await getAIConversations();
+        setSessions(loadedSessions);
+        // 최근 세션이 있으면 로드
+        if (loadedSessions.length > 0 && !currentSessionId) {
+          const latestSession = loadedSessions[0];
+          setCurrentSessionId(latestSession.id);
+          setMessages(latestSession.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            files: [], // DB에 저장 안 함
+            tool: undefined
+          })));
+        }
+      } catch (error) {
+        console.error('세션 로드 실패:', error);
+      }
+    };
+    loadSessions();
   }, []);
 
   // Ctrl+Z to undo last applied suggestion
@@ -207,6 +239,86 @@ const Taskbar: React.FC<TaskbarProps> = ({
       toast.error('클립보드 복사에 실패했습니다');
     }
   };
+
+  // 세션 저장
+  const saveCurrentSession = async () => {
+    if (messages.length === 0) return;
+
+    try {
+      const title = messages[0].content.slice(0, 50) + (messages[0].content.length > 50 ? '...' : '');
+      const conversation: AIConversation = {
+        id: currentSessionId || `session_${Date.now()}`,
+        title,
+        messages: messages.map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          timestamp: msg.timestamp
+        })),
+        createdAt: currentSessionId ? sessions.find(s => s.id === currentSessionId)?.createdAt || new Date() : new Date(),
+        updatedAt: new Date()
+      };
+
+      await saveAIConversation(conversation);
+      setCurrentSessionId(conversation.id);
+
+      // 세션 목록 업데이트
+      const updatedSessions = await getAIConversations();
+      setSessions(updatedSessions);
+    } catch (error) {
+      console.error('세션 저장 실패:', error);
+    }
+  };
+
+  // 새로운 세션 생성
+  const createNewSession = () => {
+    setMessages([]);
+    setCurrentSessionId(null);
+    setSelectedTool(null);
+    setShowSessionDropdown(false);
+  };
+
+  // 세션 선택
+  const selectSession = async (sessionId: string) => {
+    try {
+      const session = await getAIConversation(sessionId);
+      if (session) {
+        setCurrentSessionId(session.id);
+        setMessages(session.messages.map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp,
+          files: [],
+          tool: undefined
+        })));
+        setShowSessionDropdown(false);
+      }
+    } catch (error) {
+      console.error('세션 로드 실패:', error);
+    }
+  };
+
+  // 세션 삭제
+  const deleteSession = async (sessionId: string) => {
+    try {
+      await deleteAIConversation(sessionId);
+      const updatedSessions = await getAIConversations();
+      setSessions(updatedSessions);
+
+      // 현재 세션이 삭제된 경우 새로운 세션으로
+      if (currentSessionId === sessionId) {
+        createNewSession();
+      }
+    } catch (error) {
+      console.error('세션 삭제 실패:', error);
+    }
+  };
+
+  // 메시지가 변경될 때 세션 저장
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveCurrentSession();
+    }
+  }, [messages]);
 
   // 메뉴바 클립보드에서 데이터 불러오기
   const loadMenubarClipboardItems = () => {
@@ -592,7 +704,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
           const suggestedText = parts.slice(1).join('---').trim();
           
           aiMessage = {
-            role: 'ai',
+            role: 'assistant',
             content: explanation,
             timestamp: new Date(),
             tool: selectedTool || undefined,
@@ -601,7 +713,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
         } else {
           // 구분선이 없는 경우 일반 응답으로 처리
           aiMessage = {
-            role: 'ai',
+            role: 'assistant',
             content: response,
             timestamp: new Date(),
             tool: selectedTool || undefined
@@ -609,7 +721,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
         }
       } else {
         aiMessage = {
-          role: 'ai',
+          role: 'assistant',
           content: response,
           timestamp: new Date(),
           tool: selectedTool || undefined
@@ -870,7 +982,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
         </div>
 
         {/* 탭 내용 */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-visible">
           {activeTab === 'clipboard' && (
             <div 
               ref={clipboardTabRef}
@@ -1018,7 +1130,66 @@ const Taskbar: React.FC<TaskbarProps> = ({
           )}
           
           {activeTab === 'aiAssistant' && (
-            <div className="flex flex-col h-full bg-white dark:bg-gray-900">
+            <div className="flex flex-col h-full bg-white dark:bg-gray-900 max-h-full overflow-y-auto">
+              {/* 세션 선택 헤더 */}
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSessionDropdown(!showSessionDropdown)}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <span className="text-sm text-gray-900 dark:text-white truncate">
+                      {currentSessionId ? sessions.find(s => s.id === currentSessionId)?.title || '새 대화' : '새 대화'}
+                    </span>
+                    <ChevronDown size={16} className="text-gray-500 dark:text-gray-400" />
+                  </button>
+
+                  {/* 세션 드롭다운 */}
+                  {showSessionDropdown && (
+                    <div className="session-dropdown absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-[100] max-h-60 overflow-y-auto">
+                      <div className="p-2">
+                        <button
+                          onClick={createNewSession}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                        >
+                          <Plus size={14} />
+                          새 대화
+                        </button>
+                      </div>
+                      <div className="border-t border-gray-200 dark:border-gray-700">
+                        {sessions.map((session) => (
+                          <div
+                            key={session.id}
+                            className={`group relative flex items-center px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${
+                              currentSessionId === session.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                            }`}
+                            onClick={() => selectSession(session.id)}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-gray-900 dark:text-white truncate">
+                                {session.title}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {new Date(session.updatedAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                            {/* 삭제 버튼 - 호버 시 표시 */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteSession(session.id);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded transition-all ml-2"
+                            >
+                              <Trash size={12} className="text-red-500" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
 
               {/* 메시지 영역 */}
@@ -1063,7 +1234,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
                     >
                       <div className={`${message.role === 'user' ? 'max-w-[80%] order-2' : 'max-w-full order-1'}`}>
                         {/* AI 아이콘 (AI 메시지일 경우) */}
-                        {message.role === 'ai' && (
+                        {message.role === 'assistant' && (
                           <div className="flex items-center gap-2 mb-2">
                             <div className="flex items-center">
                               <Robot className="w-5 h-5 text-blue-500 mr-2" />
@@ -1209,7 +1380,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
                           )}
 
                           {/* 제안된 텍스트 표시 (요청 도구) */}
-                          {message.role === 'ai' && message.suggestedText && (
+                          {message.role === 'assistant' && message.suggestedText && (
                             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
                               <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 제안된 변경사항

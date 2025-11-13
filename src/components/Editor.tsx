@@ -14,7 +14,7 @@ import { TaskItem } from '@tiptap/extension-task-item';
 import { Image } from '@tiptap/extension-image';
 import { Link } from '@tiptap/extension-link';
 import { Extension } from '@tiptap/core';
-import { Plugin } from 'prosemirror-state';
+import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { marked } from 'marked';
 import mermaid from 'mermaid';
@@ -111,6 +111,47 @@ const MarkdownPasteExtension = Extension.create({
   },
 });
 
+// Focus/Typewriter plugin key
+const focusPluginKey = new PluginKey('focusModePlugin');
+
+// Extension to manage dimming/undimming decorations for focus mode
+const FocusModeExtension = Extension.create({
+  name: 'focusModeExtension',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: focusPluginKey,
+        state: {
+          init() {
+            return DecorationSet.empty;
+          },
+          apply(tr, old, oldState, newState) {
+            const meta = tr.getMeta(focusPluginKey as any);
+            if (meta && meta.activeRange) {
+              const { from, to } = meta.activeRange;
+              // dim entire doc
+              const dimAll = Decoration.inline(0, newState.doc.content.size, { class: 'pm-dimmed' });
+              // undim active range
+              const undim = Decoration.inline(from, to, { class: 'pm-undim' });
+              return DecorationSet.create(newState.doc, [dimAll, undim]);
+            }
+            if (meta && meta.clear) {
+              return DecorationSet.empty;
+            }
+            return old;
+          },
+        },
+        props: {
+          decorations(state) {
+            // @ts-ignore - plugin instance provided by ProseMirror
+            return this.getState(state);
+          },
+        },
+      }),
+    ];
+  },
+});
+
 interface EditorProps {
   documentId?: string;
   onSave?: (doc: Document) => void;
@@ -132,16 +173,25 @@ interface EditorProps {
   // Taskbar position props for dynamic toolbar positioning
   isRightSidebarOpen?: boolean;
   rightSidebarWidth?: number;
+  isFocusMode?: boolean;
+  isTypewriterMode?: boolean;
 }
 
-const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, onApiReady, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId, file, isRightSidebarOpen = false, rightSidebarWidth = 320 }, ref) => {
+const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, onApiReady, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId, file, isRightSidebarOpen = false, rightSidebarWidth = 320, isFocusMode = false, isTypewriterMode = false }, ref) => {
   const { id } = useParams<{ id: string }>();
   const documentId = id;
   const [title, setTitle] = useState('Untitled Document');
-  const [tabs, setTabs] = useState<DocumentTab[]>([
-    { id: '1', title: 'Untitled Document', content: '', isActive: true, documentId: documentId || undefined }
-  ]);
-  const [activeTabId, setActiveTabId] = useState('1');
+  const [tabs, setTabs] = useState<DocumentTab[]>(() => {
+    if (externalTabs && externalTabs.length > 0) {
+      return externalTabs;
+    }
+    return [
+      { id: '1', title: 'Untitled Document', content: '', isActive: true, documentId: documentId || undefined }
+    ];
+  });
+  const [activeTabId, setActiveTabId] = useState(() => {
+    return externalActiveTabId || '1';
+  });
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(() => {
     const saved = localStorage.getItem('isSearchOpen');
@@ -204,11 +254,33 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   useEffect(() => {
     localStorage.setItem('isToolbarVisible', JSON.stringify(isToolbarVisible));
   }, [isToolbarVisible]);
+
+  // externalTabs와 externalActiveTabId가 변경될 때 내부 상태 동기화
+  useEffect(() => {
+    if (externalTabs && externalTabs.length > 0) {
+      setTabs(externalTabs);
+    }
+  }, [externalTabs]);
+
+  useEffect(() => {
+    if (externalActiveTabId && externalActiveTabId !== activeTabId) {
+      setActiveTabId(externalActiveTabId);
+    }
+  }, [externalActiveTabId]);
+
   const [isPdfFile, setIsPdfFile] = useState(false);
   const [pdfData, setPdfData] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const [isEquationModalOpen, setIsEquationModalOpen] = useState(false);
   const [isTableInsertModalOpen, setIsTableInsertModalOpen] = useState(false);
+
+  // 선택 메뉴 상태
+  const [showSelectionMenu, setShowSelectionMenu] = useState(false);
+  const [selectionMenuPos, setSelectionMenuPos] = useState({ x: 0, y: 0 });
+  const [selectedTextForContext, setSelectedTextForContext] = useState('');
+  const [showMenuPopup, setShowMenuPopup] = useState(false);
+  const [showTranslationModal, setShowTranslationModal] = useState(false);
+  const [translationResult, setTranslationResult] = useState('');
 
   const editor = useEditor({
     extensions: [
@@ -228,7 +300,8 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       ListItem,
       Placeholder.configure({ placeholder: '내용을 입력하세요... ("/"를 눌러 블럭 추가)' }),
       MarkdownPasteExtension,
-      AISelectionHighlight,
+  AISelectionHighlight,
+  FocusModeExtension,
       // 표 확장: @tiptap/extension-table
       TableExtension.configure({
         resizable: true,
@@ -259,10 +332,124 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     ],
     content: '<p></p>',
     onUpdate: ({ editor }) => { onDirtyChange?.(true); },
-    onSelectionUpdate: ({ editor }) => {},
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection;
+
+      // Handle selection menu only when a non-empty selection exists
+      if (from === to) {
+        setShowSelectionMenu(false);
+        setShowMenuPopup(false);
+      } else {
+        const selectedText = editor.state.doc.textBetween(from, to);
+        if (!selectedText.trim()) {
+          setShowSelectionMenu(false);
+        } else {
+          setSelectedTextForContext(selectedText);
+          // 선택된 텍스트의 좌표 가져오기
+          try {
+            const coords = editor.view.coordsAtPos(from);
+            setSelectionMenuPos({
+              x: coords.left - 10, // 약간 왼쪽으로
+              y: coords.top - 30, // 위쪽으로
+            });
+            setShowSelectionMenu(true);
+          } catch (e) {
+            console.error('Selection menu position error:', e);
+            setShowSelectionMenu(false);
+          }
+        }
+      }
+
+      // Focus Mode: dim when focus mode is enabled. Apply only after the user
+      // has explicitly interacted (clicked) so that initially entering a document
+      // does NOT dim everything. If there's a selection, undim that selection;
+      // if there's only a caret (from === to) undim the current block.
+      try {
+        if (isFocusMode && editor.view && userInteractedRef.current) {
+          if (from === to) {
+            const { $from } = editor.state.selection as any;
+            const start = $from.start($from.depth);
+            const end = $from.end($from.depth);
+            const tr = editor.state.tr.setMeta(focusPluginKey as any, { activeRange: { from: start, to: end } });
+            editor.view.dispatch(tr);
+          } else {
+            const tr = editor.state.tr.setMeta(focusPluginKey as any, { activeRange: { from, to } });
+            editor.view.dispatch(tr);
+          }
+        } else if (editor.view) {
+          // Clear decorations when not focus-mode or before user interacted
+          const tr = editor.state.tr.setMeta(focusPluginKey as any, { clear: true });
+          editor.view.dispatch(tr);
+        }
+      } catch (err) {
+        console.error('Focus mode plugin error:', err);
+      }
+
+      // Typewriter Mode: keep the active line vertically centered
+      try {
+        if (isTypewriterMode && editor.view) {
+          const pos = editor.state.selection.from;
+          const coords = editor.view.coordsAtPos(pos);
+          const scroller = editor.view.dom.parentElement as HTMLElement | null;
+          if (coords && scroller) {
+            const target = coords.top + scroller.scrollTop - scroller.clientHeight / 2;
+            scroller.scrollTo({ top: target, behavior: 'smooth' });
+          }
+        }
+      } catch (err) {
+        console.error('Typewriter mode scroll error:', err);
+      }
+    },
+    onFocus: ({ editor }) => {
+      try {
+        if (isFocusMode && editor.view && userInteractedRef.current) {
+          const { from, to } = editor.state.selection;
+          if (from === to) {
+            const { $from } = editor.state.selection as any;
+            const start = $from.start($from.depth);
+            const end = $from.end($from.depth);
+            const tr = editor.state.tr.setMeta(focusPluginKey as any, { activeRange: { from: start, to: end } });
+            editor.view.dispatch(tr);
+          } else {
+            const tr = editor.state.tr.setMeta(focusPluginKey as any, { activeRange: { from, to } });
+            editor.view.dispatch(tr);
+          }
+        }
+      } catch (err) {
+        console.error('Focus mode onFocus error:', err);
+      }
+    },
+    onBlur: ({ editor }) => {
+      try {
+        if (editor.view) {
+          const tr = editor.state.tr.setMeta(focusPluginKey as any, { clear: true });
+          editor.view.dispatch(tr);
+          // reset user interaction so re-entering does not auto-apply focus decorations
+          userInteractedRef.current = false;
+        }
+      } catch (err) {
+        console.error('Focus mode onBlur error:', err);
+      }
+    },
     onCreate: ({ editor }) => { setIsEditorReady(true); },
     onDestroy: () => {},
   });
+  // Track whether the user has interacted (clicked/touched) inside the editor.
+  // We only apply focus-mode dimming after an explicit user interaction so that
+  // entering a document does not immediately dim everything.
+  const userInteractedRef = useRef(false);
+
+  useEffect(() => {
+    if (!editor || !editor.view) return;
+    const node = editor.view.dom as HTMLElement;
+    const onPointerDown = () => {
+      userInteractedRef.current = true;
+    };
+    node.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      node.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [editor]);
 // 마크다운 렌더링 컴포넌트 (표, 수식, 머메이드, 동영상, 코드)
 const MarkdownRenderer = ({ html }: { html: string }) => {
   // 수식 렌더링
@@ -378,7 +565,7 @@ const MarkdownRenderer = ({ html }: { html: string }) => {
             </table>
 
             {/* Bottom border area: a border-like area under the table for hover controls */}
-            <div className="border-t-2 border-gray-300 dark:border-gray-600 mt-2 pt-2 pb-2 flex justify-center group">
+            <div className="border-t-2 border-gray-300 dark:border-gray-600 mt-2 pt-2 pb-2 flex justify-end group">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -956,8 +1143,67 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
   // 수식 삽입 핸들러
   const handleEquationInsert = (latex: string, isBlock: boolean = false) => {
     if (!editor) return;
-    const content = isBlock ? `$$${latex}$$` : `$${latex}$`;
-    editor.chain().focus().insertContent(content).run();
+    editor.chain().focus().insertContent({ type: isBlock ? 'mathBlock' : 'mathInline', attrs: { latex } }).run();
+  };
+
+  // 선택 메뉴 핸들러
+  const handleSelectionMenu = () => {
+    setShowMenuPopup(true);
+  };
+
+  const handleSelectionMenuClose = () => {
+    setShowMenuPopup(false);
+  };
+
+  // 선택 메뉴 옵션 핸들러들
+  const handleTranslate = async () => {
+    if (!selectedTextForContext) return;
+    console.log('번역 요청:', selectedTextForContext);
+    // AI로 번역 요청 (영어 -> 한국어 가정)
+    const prompt = `다음 텍스트를 한국어로 번역하세요. 짧고 직접적인 번역만 제공하세요: "${selectedTextForContext}"`;
+    try {
+      const response = await answerQuestion(prompt);
+      console.log('번역 응답:', response);
+      setTranslationResult(response);
+      setShowTranslationModal(true);
+      console.log('모달 열기 시도');
+    } catch (error) {
+      console.error('번역 실패:', error);
+      toast.error('번역 실패: ' + (error as Error).message);
+    }
+    handleSelectionMenuClose();
+  };
+
+  const handleAIRequest = () => {
+    if (!selectedTextForContext) return;
+    setSelectedTextForAI({ from: 0, to: 0, text: selectedTextForContext }); // 임시
+    setHighlightDisabled(false);
+    onOpenTaskbar?.();
+    handleSelectionMenuClose();
+  };
+
+  const handleHyperlink = () => {
+    if (!selectedTextForContext) return;
+    setLinkUrl('');
+    setShowLinkUrlModal(true);
+    handleSelectionMenuClose();
+  };
+
+  const handleCopy = async () => {
+    if (!selectedTextForContext) return;
+    try {
+      await navigator.clipboard.writeText(selectedTextForContext);
+      toast.success('복사되었습니다');
+    } catch (error) {
+      toast.error('복사 실패');
+    }
+    handleSelectionMenuClose();
+  };
+
+  const handleDelete = () => {
+    if (!editor) return;
+    editor.chain().focus().deleteSelection().run();
+    handleSelectionMenuClose();
   };
 
   // 문서 목록 사이드바 상태 변경 시 localStorage에 저장
@@ -1014,6 +1260,8 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       }
     }
   }, [isEditorReady, editor, documentId, onDirtyChange]);
+
+  // 선택 메뉴 이벤트 리스너 제거 (onSelectionUpdate에서 처리)
 
   // 파일 업로드 처리
   useEffect(() => {
@@ -2381,6 +2629,7 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
           </div>
         ) : (
           <EditorContent 
+            ref={editorContainerRef}
             editor={editor} 
             className="h-full [&_.ProseMirror]:outline-none [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:text-sm sm:[&_.ProseMirror]:text-base [&_.ProseMirror]:max-w-none [&_.ProseMirror]:border-0 [&_.ProseMirror]:focus:outline-none [&_.ProseMirror]:p-6 [&_.ProseMirror]:min-h-full [&_.ProseMirror]:overflow-y-visible [&_.ProseMirror]:pb-32 [&_.ProseMirror]:text-gray-900 [&_.ProseMirror]:dark:text-gray-100" 
           />
@@ -2658,6 +2907,115 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
         isRightSidebarOpen={isRightSidebarOpen}
         rightSidebarWidth={rightSidebarWidth}
       />
+      
+      {/* 선택 메뉴 버튼 */}
+      {showSelectionMenu && !showMenuPopup && (
+        <div
+          className="fixed z-50"
+          style={{
+            top: selectionMenuPos.y + 'px',
+            left: selectionMenuPos.x + 'px',
+          }}
+        >
+          <button
+            onClick={handleSelectionMenu}
+            className="w-6 h-6 text-gray-800 rounded-full flex items-center justify-center hover:bg-gray-100"
+            title="옵션"
+          >
+            ...
+          </button>
+        </div>
+      )}
+
+      {/* 선택 메뉴 팝업 */}
+      {showMenuPopup && (
+        <div
+          className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg py-1"
+          style={{
+            top: selectionMenuPos.y + 30 + 'px', // 버튼 아래에
+            left: selectionMenuPos.x + 'px',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex">
+            <button
+              onClick={handleTranslate}
+              className="px-3 py-2 text-sm hover:scale-105 hover:shadow-sm transition-all whitespace-nowrap"
+            >
+              번역
+            </button>
+            <button
+              onClick={handleAIRequest}
+              className="px-3 py-2 text-sm hover:scale-105 hover:shadow-sm transition-all whitespace-nowrap"
+            >
+              AI 요청
+            </button>
+            <button
+              onClick={handleHyperlink}
+              className="px-3 py-2 text-sm hover:scale-105 hover:shadow-sm transition-all whitespace-nowrap"
+            >
+              하이퍼링크
+            </button>
+            <button
+              onClick={handleCopy}
+              className="px-3 py-2 text-sm hover:scale-105 hover:shadow-sm transition-all whitespace-nowrap"
+            >
+              복사
+            </button>
+            <button
+              onClick={handleDelete}
+              className="px-3 py-2 text-sm hover:scale-105 hover:shadow-sm transition-all whitespace-nowrap"
+            >
+              삭제
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* 번역 모달 */}
+      <Modal
+        isOpen={showTranslationModal}
+        onRequestClose={() => setShowTranslationModal(false)}
+        style={{
+          content: {
+            top: '50%',
+            left: '50%',
+            right: 'auto',
+            bottom: 'auto',
+            marginRight: '-50%',
+            transform: 'translate(-50%, -50%)',
+            maxWidth: '500px',
+            width: '90%',
+            padding: '20px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+          },
+          overlay: {
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 1000,
+          },
+        }}
+        contentLabel="번역 결과"
+      >
+        <div>
+          <h2 className="text-xl font-bold mb-4">번역 결과</h2>
+          <p className="mb-4 whitespace-pre-wrap">{translationResult}</p>
+          <button
+            onClick={() => setShowTranslationModal(false)}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            닫기
+          </button>
+        </div>
+      </Modal>
+      
+      {/* 클릭 시 메뉴 닫기 */}
+      {showMenuPopup && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={handleSelectionMenuClose}
+        />
+      )}
     </div>
   );
 });

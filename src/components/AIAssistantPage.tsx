@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Stars, Paperclip, Image as ImageIcon, FileEarmarkPdf, Plus, Clipboard, X, Trash } from 'react-bootstrap-icons';
+import { Send, Stars, Paperclip, Image as ImageIcon, FileEarmarkPdf, Plus, Clipboard, X, Trash, ChatDots, ThreeDots } from 'react-bootstrap-icons';
 import ReactMarkdown from 'react-markdown';
 import toast from 'react-hot-toast';
 import { generateAIResponse, researchTopic, analyzeText, generatePersonaFeedback, answerQuestion, analyzeImage } from '../utils/ai';
+import { saveAIConversation, getAIConversations, getAIConversation, updateAIConversation, deleteAIConversation, AIConversation, AIMessage } from '../utils/db';
 
 interface Message {
-  role: 'user' | 'ai';
+  role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
   files?: UploadedFile[];
@@ -21,7 +22,9 @@ interface UploadedFile {
 }
 
 const AIAssistantPage: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [currentSession, setCurrentSession] = useState<Message[]>([]);
+  const [sessions, setSessions] = useState<AIConversation[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -38,14 +41,41 @@ const AIAssistantPage: React.FC = () => {
   const addMenuRef = useRef<HTMLDivElement>(null);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
 
-  // 메시지 목록이 업데이트되면 스크롤을 맨 아래로
+  // 메시지가 변경될 때 세션 저장
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (currentSession.length > 0) {
+      saveCurrentSession();
+    }
+  }, [currentSession]);
 
   // 페이지가 로드될 때 입력창에 포커스
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // 세션 목록 로드
+  useEffect(() => {
+    const loadSessions = async () => {
+      try {
+        const loadedSessions = await getAIConversations();
+        setSessions(loadedSessions);
+        // 최근 세션이 있으면 로드
+        if (loadedSessions.length > 0 && !currentSessionId) {
+          const latestSession = loadedSessions[0];
+          setCurrentSessionId(latestSession.id);
+          setCurrentSession(latestSession.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            files: [], // DB에 저장 안 함
+            tool: undefined
+          })));
+        }
+      } catch (error) {
+        console.error('세션 로드 실패:', error);
+      }
+    };
+    loadSessions();
   }, []);
 
   // 메뉴 외부 클릭 감지
@@ -268,7 +298,7 @@ const AIAssistantPage: React.FC = () => {
       tool: selectedTool || undefined
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setCurrentSession(prev => [...prev, userMessage]);
     setInputValue('');
     setSelectedTool(null);
     const filesToSend = [...uploadedFiles];
@@ -318,20 +348,20 @@ const AIAssistantPage: React.FC = () => {
       }
 
       const aiMessage: Message = {
-        role: 'ai',
+        role: 'assistant',
         content: response,
         timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, aiMessage]);
+      setCurrentSession(prev => [...prev, aiMessage]);
     } catch (error) {
       console.error('AI API error:', error);
       const errorMessage: Message = {
-        role: 'ai',
+        role: 'assistant',
         content: '죄송합니다. AI 응답을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setCurrentSession(prev => [...prev, errorMessage]);
       toast.error('AI 응답 생성에 실패했습니다.');
     } finally {
       setIsProcessing(false);
@@ -345,20 +375,132 @@ const AIAssistantPage: React.FC = () => {
     }
   };
 
-  const handleClearChat = () => {
-    setMessages([]);
+  // 세션 저장
+  const saveCurrentSession = async () => {
+    if (currentSession.length === 0) return;
+
+    try {
+      const title = currentSession[0].content.slice(0, 50) + (currentSession[0].content.length > 50 ? '...' : '');
+      const conversation: AIConversation = {
+        id: currentSessionId || `session_${Date.now()}`,
+        title,
+        messages: currentSession.map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          timestamp: msg.timestamp
+        })),
+        createdAt: currentSessionId ? sessions.find(s => s.id === currentSessionId)?.createdAt || new Date() : new Date(),
+        updatedAt: new Date()
+      };
+
+      await saveAIConversation(conversation);
+      setCurrentSessionId(conversation.id);
+
+      // 세션 목록 업데이트
+      const updatedSessions = await getAIConversations();
+      setSessions(updatedSessions);
+    } catch (error) {
+      console.error('세션 저장 실패:', error);
+    }
+  };
+
+  // 새로운 세션 생성
+  const createNewSession = () => {
+    setCurrentSession([]);
+    setCurrentSessionId(null);
     setSelectedTool(null);
   };
 
+  // 세션 선택
+  const selectSession = async (sessionId: string) => {
+    try {
+      const session = await getAIConversation(sessionId);
+      if (session) {
+        setCurrentSessionId(session.id);
+        setCurrentSession(session.messages.map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp,
+          files: [],
+          tool: undefined
+        })));
+      }
+    } catch (error) {
+      console.error('세션 로드 실패:', error);
+    }
+  };
+
+  // 세션 삭제
+  const deleteSession = async (sessionId: string) => {
+    try {
+      await deleteAIConversation(sessionId);
+      const updatedSessions = await getAIConversations();
+      setSessions(updatedSessions);
+
+      // 현재 세션이 삭제된 경우 새로운 세션으로
+      if (currentSessionId === sessionId) {
+        createNewSession();
+      }
+    } catch (error) {
+      console.error('세션 삭제 실패:', error);
+    }
+  };
+
   return (
-    <div 
-      ref={dropZoneRef}
-      className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 relative"
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
+    <div className="flex h-full bg-gray-50 dark:bg-gray-900">
+      {/* 좌측 사이드바 - 세션 목록 */}
+      <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <button
+            onClick={createNewSession}
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <Plus size={16} />
+            새 대화
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {sessions.map((session) => (
+            <div
+              key={session.id}
+              className={`group relative p-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer ${
+                currentSessionId === session.id ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-l-purple-500' : ''
+              }`}
+              onClick={() => selectSession(session.id)}
+            >
+              <div className="pr-8">
+                <div className="font-medium text-sm text-gray-900 dark:text-white truncate">
+                  {session.title}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {new Date(session.updatedAt).toLocaleDateString()}
+                </div>
+              </div>
+              {/* 삭제 버튼 - 호버 시 표시 */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteSession(session.id);
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/20 p-1 rounded transition-all"
+              >
+                <Trash size={14} className="text-red-500" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 메인 채팅 영역 */}
+      <div className="flex-1 flex flex-col">
+        <div 
+          ref={dropZoneRef}
+          className="flex flex-col h-full relative"
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
       {/* 드래그 오버레이 */}
       {isDragging && (
         <div className="absolute inset-0 bg-blue-500/10 dark:bg-blue-400/10 backdrop-blur-sm z-50 rounded-xl border-4 border-dashed border-blue-500 dark:border-blue-400 flex items-center justify-center pointer-events-none">
@@ -383,9 +525,9 @@ const AIAssistantPage: React.FC = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {messages.length > 0 && (
+          {currentSession.length > 0 && (
             <button
-              onClick={handleClearChat}
+              onClick={createNewSession}
               className="text-white/80 hover:text-white transition-colors text-sm px-2 py-1 rounded hover:bg-white/10"
             >
               대화 초기화
@@ -396,7 +538,7 @@ const AIAssistantPage: React.FC = () => {
 
       {/* 메시지 영역 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
+        {currentSession.length === 0 && (
           <div className="text-center py-12">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
               <Stars size={32} className="text-purple-600 dark:text-purple-400" />
@@ -406,7 +548,7 @@ const AIAssistantPage: React.FC = () => {
           </div>
         )}
 
-        {messages.map((message, index) => (
+        {currentSession.map((message, index) => (
           <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[80%] ${message.role === 'user' ? 'order-2' : 'order-1'}`}>
               {/* 도구 표시 */}
@@ -691,6 +833,8 @@ const AIAssistantPage: React.FC = () => {
           onChange={handleFileSelect}
           className="hidden"
         />
+      </div>
+      </div>
       </div>
     </div>
   );

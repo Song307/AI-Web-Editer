@@ -335,6 +335,15 @@ body {
   position: relative; /* 슬래시 메뉴의 상대 위치 기준점 */
 }
 
+/* Focus / Typewriter helpers for ProseMirror decorations */
+.pm-dimmed {
+  opacity: 0.22;
+  transition: opacity 160ms ease-in-out;
+}
+.pm-undim {
+  opacity: 1 !important;
+}
+
 .editor-header {
   display: flex;
   align-items: center;

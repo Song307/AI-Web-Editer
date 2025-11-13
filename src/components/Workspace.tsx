@@ -25,6 +25,8 @@ interface WorkspaceProps {
   onRegisterApi?: (api: { replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void } | null) => void;
   isRightSidebarOpen?: boolean;
   rightSidebarWidth?: number;
+  isFocusMode?: boolean;
+  isTypewriterMode?: boolean;
 }
 
 const Workspace: React.FC<WorkspaceProps> = ({
@@ -35,6 +37,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
   onRegisterApi,
   isRightSidebarOpen = false,
   rightSidebarWidth = 320,
+  isFocusMode = false,
+  isTypewriterMode = false,
 }) => {
   const editorRef = useRef<any>(null);
   const navigate = useNavigate();
@@ -84,67 +88,109 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
   // Dashboard에서 전달된 파일 생성 요청 처리
   useEffect(() => {
-    const loadFileFromState = async () => {
-      if (location.state?.createFileType) {
-        const fileType = location.state.createFileType as 'document' | 'image' | 'pdf';
-        const newTab: Tab = {
-          id: `new-${fileType}-${Date.now()}`,
-          title: `새 ${fileType === 'document' ? '문서' : fileType === 'image' ? '이미지' : 'PDF'}`,
-          type: fileType
-        };
-        setTaskList(prev => [...prev, newTab]);
-        setActiveTabId(newTab.id);
-        // state 초기화
-        navigate('/workspace', { replace: true, state: {} });
-      } else if (location.state?.imageId) {
-        // 이미지 파일 열기
-        const imageId = location.state.imageId;
-        try {
-          const imageFile = await getImage(imageId);
-          if (imageFile) {
-            // 이미지 파일을 File 객체로 변환
-            const file = new File([imageFile.data], imageFile.name, { type: imageFile.type });
-            const newTab: Tab = {
-              id: `image-${imageId}-${Date.now()}`,
-              title: imageFile.name,
-              type: 'image',
-              file: file
-            };
-            setTaskList(prev => [...prev, newTab]);
-            setActiveTabId(newTab.id);
-          }
-        } catch (error) {
-          console.error('이미지 파일 로드 실패:', error);
-          toast.error('이미지 파일을 불러올 수 없습니다.');
+    if (location.state?.createFileType) {
+      const fileType = location.state.createFileType as 'document' | 'image' | 'pdf';
+      const newTab: Tab = {
+        id: `new-${fileType}-${Date.now()}`,
+        title: `새 ${fileType === 'document' ? '문서' : fileType === 'image' ? '이미지' : 'PDF'}`,
+        type: fileType
+      };
+      setTaskList(prev => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+      // state 초기화
+      navigate('/workspace', { replace: true, state: {} });
+    }
+  }, [location.state?.createFileType, navigate]);
+
+  // 이미지 파일 로드
+  useEffect(() => {
+    if (!location.state?.imageId) return;
+
+    const imageId = location.state.imageId;
+    if (loadingIdsRef.current.has(imageId)) return; // 이미 로딩 중이면 중단
+
+    loadingIdsRef.current.add(imageId);
+    const loadImage = async () => {
+      try {
+        const imageFile = await getImage(imageId);
+        if (imageFile) {
+          setTaskList(prev => {
+            const existingTab = prev.find(tab => tab.type === 'image' && tab.id.startsWith(`image-${imageId}-`));
+            if (existingTab) {
+              setActiveTabId(existingTab.id);
+              return prev;
+            } else {
+              const file = new File([imageFile.data], imageFile.name, { type: imageFile.type });
+              const newTab: Tab = {
+                id: `image-${imageId}-${Date.now()}`,
+                title: imageFile.name,
+                type: 'image',
+                file: file
+              };
+              setActiveTabId(newTab.id);
+              return [...prev, newTab];
+            }
+          });
+        } else {
+          console.error('이미지 파일을 찾을 수 없습니다:', imageId);
+          toast.error('이미지 파일을 찾을 수 없습니다.');
         }
-        navigate('/workspace', { replace: true, state: {} });
-      } else if (location.state?.pdfId) {
-        // PDF 파일 열기
-        const pdfId = location.state.pdfId;
-        try {
-          const pdfFile = await getPdf(pdfId);
-          if (pdfFile) {
-            // PDF 파일을 File 객체로 변환
-            const file = new File([pdfFile.data], pdfFile.name, { type: pdfFile.type });
-            const newTab: Tab = {
-              id: `pdf-${pdfId}-${Date.now()}`,
-              title: pdfFile.name,
-              type: 'pdf',
-              file: file
-            };
-            setTaskList(prev => [...prev, newTab]);
-            setActiveTabId(newTab.id);
-          }
-        } catch (error) {
-          console.error('PDF 파일 로드 실패:', error);
-          toast.error('PDF 파일을 불러올 수 없습니다.');
-        }
-        navigate('/workspace', { replace: true, state: {} });
+      } catch (error) {
+        console.error('이미지 파일 로드 실패:', error);
+        toast.error('이미지 파일을 불러올 수 없습니다.');
+      } finally {
+        loadingIdsRef.current.delete(imageId);
       }
+      navigate('/workspace', { replace: true, state: {} });
     };
 
-    loadFileFromState();
-  }, [location.state, navigate]);
+    loadImage();
+  }, [location.state?.imageId, navigate]);
+
+  // PDF 파일 로드
+  useEffect(() => {
+    if (!location.state?.pdfId) return;
+
+    const pdfId = location.state.pdfId;
+    if (loadingIdsRef.current.has(pdfId)) return; // 이미 로딩 중이면 중단
+
+    loadingIdsRef.current.add(pdfId);
+    const loadPdf = async () => {
+      try {
+        const pdfFile = await getPdf(pdfId);
+        if (pdfFile) {
+          setTaskList(prev => {
+            const existingTab = prev.find(tab => tab.type === 'pdf' && tab.id.startsWith(`pdf-${pdfId}-`));
+            if (existingTab) {
+              setActiveTabId(existingTab.id);
+              return prev;
+            } else {
+              const file = new File([pdfFile.data], pdfFile.name, { type: pdfFile.type });
+              const newTab: Tab = {
+                id: `pdf-${pdfId}-${Date.now()}`,
+                title: pdfFile.name,
+                type: 'pdf',
+                file: file
+              };
+              setActiveTabId(newTab.id);
+              return [...prev, newTab];
+            }
+          });
+        } else {
+          console.error('PDF 파일을 찾을 수 없습니다:', pdfId);
+          toast.error('PDF 파일을 찾을 수 없습니다.');
+        }
+      } catch (error) {
+        console.error('PDF 파일 로드 실패:', error);
+        toast.error('PDF 파일을 불러올 수 없습니다.');
+      } finally {
+        loadingIdsRef.current.delete(pdfId);
+      }
+      navigate('/workspace', { replace: true, state: {} });
+    };
+
+    loadPdf();
+  }, [location.state?.pdfId, navigate]);
 
   // dataURL을 Blob으로 변환하는 헬퍼 함수
   const dataURLToBlob = (dataURL: string): Blob => {
@@ -309,8 +355,14 @@ const Workspace: React.FC<WorkspaceProps> = ({
   };
 
   const handleCloseTab = (tabId: string) => {
+    console.log('handleCloseTab called with tabId:', tabId);
+    console.log('current taskList:', taskList);
+    console.log('current activeTabId:', activeTabId);
+
     const tabIndex = taskList.findIndex(tab => tab.id === tabId);
     const newTasks = taskList.filter(tab => tab.id !== tabId);
+    console.log('newTasks after filter:', newTasks);
+
     setTaskList(newTasks);
 
     // 닫은 탭이 활성 탭이었다면 다른 탭 활성화
@@ -540,6 +592,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 setTabs={setTabsFromEditor}
                 activeTabId={activeTabId || ''}
                 setActiveTabId={(id: string) => setActiveTabId(id)}
+                isFocusMode={isFocusMode}
+                isTypewriterMode={isTypewriterMode}
                 initialContent={typeof activeTab.content === 'string' ? activeTab.content : (activeTab.content?.content ?? '')}
                 initialContentType={typeof activeTab.content === 'object' && activeTab.content?.contentType ? activeTab.content.contentType : undefined}
                 initialTitle={activeTab.title}

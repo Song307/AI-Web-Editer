@@ -15,10 +15,13 @@ const genAI = new GoogleGenerativeAI(API_KEY);
 
 export const generateAIResponse = async (prompt: string): Promise<string> => {
   try {
+    console.log('AI 요청 시작:', prompt.substring(0, 50) + '...');
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite-preview-06-17' });
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    return response.text();
+    const text = response.text();
+    console.log('AI 응답 성공');
+    return text;
   } catch (error) {
     console.error('AI API error:', error);
     throw new Error('Failed to generate AI response');
