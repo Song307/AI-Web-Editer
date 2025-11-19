@@ -33,52 +33,70 @@ import TurndownService from 'turndown';
 import HeaderMenu from './Editor/HeaderMenu';
 import LeftSidebar from './Editor/LeftSidebar';
 import FloatingToolbar from './Editor/FloatingToolbar';
-import { DocumentTab } from './Editor/types';
-import { 
-  Robot,
-  X,
-  PlusLg,
-} from 'react-bootstrap-icons';
 import DocumentListSidebar, { DocumentListSidebarRef } from './Editor/DocumentListSidebar';
+import { DocumentTab } from './Editor/types';
+import { Robot, X } from 'react-bootstrap-icons';
 
-// AI 선택 하이라이트를 위한 Mark 확장
+// Extension that highlights AI selections via a ProseMirror decoration
+// Helper: escape HTML for safe insertion when wrapping plain text in a span
+const escapeHtml = (unsafe: string) => {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 const AISelectionHighlight = Extension.create({
   name: 'aiSelectionHighlight',
-
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        state: {
+        key: new PluginKey('aiSelection'),
+          state: {
           init() {
             return DecorationSet.empty;
           },
-          apply(tr, old) {
-            // 트랜잭션에서 AI 선택 범위를 가져옴
+          apply(tr, old, oldState, newState) {
             const aiSelection = tr.getMeta('aiSelection');
+            // aiSelection may include { from, to, applied }
             if (aiSelection) {
-              const { from, to } = aiSelection;
-              if (from !== to) {
-                const decoration = Decoration.inline(from, to, { class: 'ai-selection-highlight' });
-                  return DecorationSet.create(tr.doc, [decoration]);
-              }
+                const { from, to, applied } = aiSelection as { from: number; to: number; applied?: boolean };
+                console.debug('AISelectionHighlight plugin: aiSelection meta=', aiSelection);
+                if (from !== to) {
+                  // Prefer inline style for the applied highlight to avoid being overridden
+                  const attrs: any = applied
+                    ? { class: 'ai-selection-applied', style: 'background-color: #fff9c4 !important; padding: 0.02rem 0.02rem; border-radius: 2px;' }
+                    : { class: 'ai-selection-highlight' };
+                  console.debug('AISelectionHighlight plugin: creating decoration', { from, to, attrs });
+                  const decoration = Decoration.inline(from, to, attrs);
+                  // Use newState.doc to ensure decorations are created against the correct document
+                  return DecorationSet.create(newState.doc, [decoration]);
+                }
             }
-            // aiSelection이 null이면 하이라이트 제거
+
+            // If explicit clear meta provided, clear decorations
             if (aiSelection === null) {
               return DecorationSet.empty;
             }
-            // 그 외의 경우 기존 decoration 유지
+
             return old;
-          },
+          }
         },
         props: {
           decorations(state) {
-            return this.getState(state);
+            // @ts-ignore plugin instance
+            return (this as any).getState(state);
           },
         },
       }),
     ];
   },
 });
+
+// Module-scoped holder for forwarded editor API to avoid repeated onApiReady calls
+const __forwardedEditorApiRef: { current: any | null } = { current: null };
 
 // 마크다운 붙여넣기 및 렌더링 확장 (표, 수식, 머메이드, 동영상 지원)
 const MarkdownPasteExtension = Extension.create({
@@ -158,7 +176,7 @@ interface EditorProps {
   onSelectionRangeChange?: (range: { from: number; to: number } | null) => void;
   onOpenTaskbar?: () => void;
   onOpenDocument?: (docId: string) => void;
-  onApiReady?: (api: { replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void }) => void;
+  onApiReady?: (api: { replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void } | null) => void;
   // optional inputs from Workspace to ensure content displays when Workspace drives tabs
   initialContent?: string;
   initialContentType?: 'markdown' | 'html';
@@ -175,7 +193,7 @@ interface EditorProps {
   isTypewriterMode?: boolean;
 }
 
-const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void; collapseSelection: () => void; focus: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, onApiReady, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId, file, isRightSidebarOpen = false, rightSidebarWidth = 320, isFocusMode = false, isTypewriterMode = false }, ref) => {
+const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () => void; replaceSelection: (text: string, range?: { from: number; to: number }) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void; collapseSelection: () => void; focus: () => void }, EditorProps>(({ onSave, onDirtyChange, onSelectionPreviewChange, onSelectionRangeChange, onOpenTaskbar, onOpenDocument, onApiReady, initialContent, initialContentType, initialTitle, tabs: externalTabs, activeTabId: externalActiveTabId, setTabs: externalSetTabs, setActiveTabId: externalSetActiveTabId, file, isRightSidebarOpen = false, rightSidebarWidth = 320, isFocusMode = false, isTypewriterMode = false }, ref) => {
   const { id } = useParams<{ id: string }>();
   const documentId = id;
   const [title, setTitle] = useState('Untitled Document');
@@ -220,36 +238,71 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const [selectedMenuIndex, setSelectedMenuIndex] = useState(0);
   const [selectedTextForAI, setSelectedTextForAI] = useState<{ from: number; to: number; text: string } | null>(null);
   const aiSelectionTimersRef = useRef<number[]>([]);
+  // Temporary storage for selection captured on AI button mousedown
+  const aiSavedRangesRef = useRef<Range[] | null>(null);
+  const aiSavedEditorSelectionRef = useRef<{ from: number; to: number } | null>(null);
 
   const clearAiSelectionTimers = () => {
     aiSelectionTimersRef.current.forEach(id => clearTimeout(id));
     aiSelectionTimersRef.current = [];
   };
 
-  const scheduleAiSelectionDispatch = (from: number, to: number) => {
+  const scheduleAiSelectionDispatch = (from: number, to: number, applied: boolean = false) => {
     if (!editor) return;
     try {
-      const tr = editor.state.tr.setMeta('aiSelection', { from, to });
+      const tr = editor.state.tr.setMeta('aiSelection', { from, to, applied });
       editor.view.dispatch(tr);
+      console.debug('scheduleAiSelectionDispatch: dispatched aiSelection', { from, to, applied });
     } catch (e) {
-      // ignore
+      console.warn('scheduleAiSelectionDispatch: dispatch failed', e);
     }
 
     // re-dispatch a few times to survive focus/blur and other transactions
     clearAiSelectionTimers();
     const t1 = window.setTimeout(() => {
       try {
-        const tr2 = editor.state.tr.setMeta('aiSelection', { from, to });
+        const tr2 = editor.state.tr.setMeta('aiSelection', { from, to, applied });
         editor.view.dispatch(tr2);
       } catch (e) {}
     }, 120);
     const t2 = window.setTimeout(() => {
       try {
-        const tr3 = editor.state.tr.setMeta('aiSelection', { from, to });
+        const tr3 = editor.state.tr.setMeta('aiSelection', { from, to, applied });
         editor.view.dispatch(tr3);
       } catch (e) {}
     }, 500);
-    aiSelectionTimersRef.current.push(t1, t2);
+    const t3 = window.setTimeout(() => {
+      try {
+        const tr4 = editor.state.tr.setMeta('aiSelection', { from, to, applied });
+        editor.view.dispatch(tr4);
+      } catch (e) {}
+    }, 800);
+    const t4 = window.setTimeout(() => {
+      try {
+        const tr5 = editor.state.tr.setMeta('aiSelection', { from, to, applied });
+        editor.view.dispatch(tr5);
+      } catch (e) {}
+    }, 1200);
+    const t5 = window.setTimeout(() => {
+      try {
+        const tr6 = editor.state.tr.setMeta('aiSelection', { from, to, applied });
+        editor.view.dispatch(tr6);
+      } catch (e) {}
+    }, 2000);
+    aiSelectionTimersRef.current.push(t1, t2, t3, t4, t5);
+
+    // After a short delay, check if the decoration DOM exists (debug helper)
+    window.setTimeout(() => {
+      try {
+        const editorEl = editor.view?.dom?.closest('.editor-container') as HTMLElement | null;
+        if (!editorEl) return;
+        const foundApplied = editorEl.querySelectorAll('.ai-selection-applied').length;
+        const foundHighlight = editorEl.querySelectorAll('.ai-selection-highlight').length;
+        console.debug('scheduleAiSelectionDispatch: DOM check for decorations', { foundApplied, foundHighlight });
+      } catch (err) {
+        // ignore
+      }
+    }, 80);
   };
   const [highlightDisabled, setHighlightDisabled] = useState(false);
   const [isEditorReady, setIsEditorReady] = useState(false);
@@ -284,6 +337,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const [rewriteTone, setRewriteTone] = useState<string | undefined>(undefined);
   // Pending AI-applied change awaiting user accept/reject
   const [pendingAiChange, setPendingAiChange] = useState<null | { from: number; to: number; original: string; replacement: string }>(null);
+  const [pendingAiPos, setPendingAiPos] = useState<{ x: number; y: number } | null>(null);
 
   // 요약 요청 처리기
   const handleSummarize = async (length: 'short' | 'medium' | 'long' = 'short') => {
@@ -1420,9 +1474,10 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
     onOpenTaskbar?.();
     handleSelectionMenuClose();
 
-    // Restore editor + DOM selection on the next tick. We restore the
-    // ProseMirror selection first (so internal state matches), then restore
-    // DOM ranges and finally restore previous focus if needed.
+    // Restore editor + DOM selection after a short delay. Give the app's
+    // UI (taskbar/sidebar) time to render and avoid races where focusing
+    // or other UI events clear the selection. This delay is intentionally
+    // longer than an immediate tick.
     const prevActive = document.activeElement as HTMLElement | null;
     setTimeout(() => {
       try {
@@ -1464,7 +1519,7 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       } catch (e) {
         /* ignore focus restore errors */
       }
-    }, 20);
+    }, 120);
   };
 
   const handleHyperlink = () => {
@@ -1507,31 +1562,57 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
   }, [isSearchOpen]);
 
   // 에디터가 준비된 후 문서 로딩
+  const initialContentAppliedRef = useRef(false);
+  // 어떤 documentId가 에디터에 적용되었는지 추적하여
+  // 동일한 문서에 대해 불필요하게 다시 setContent 하지 않도록 함
+  const appliedDocumentIdRef = useRef<string | null>(null);
+
+  // 에디터가 준비된 후 문서 로딩
   useEffect(() => {
     if (isEditorReady && editor) {
       // If Workspace passed an initialContent (active tab content), prefer that immediately
-      if (initialContent != null) {
+        if (initialContent != null && !initialContentAppliedRef.current) {
         if (initialContentType === 'markdown') {
           try {
+            console.log('Editor: setting content from initialContent (markdown)');
+            console.trace();
             editor.commands.setContent(marked(initialContent) as string);
           } catch (err) {
             console.error('초기 마크다운 변환 실패:', err);
+            console.log('Editor: setting content from initialContent (fallback)');
+            console.trace();
             editor.commands.setContent(initialContent);
           }
         } else {
+          console.log('Editor: setting content from initialContent');
+          console.trace();
           editor.commands.setContent(initialContent);
         }
+        // mark that we applied the initial content so we don't overwrite user edits later
+        initialContentAppliedRef.current = true;
         if (initialTitle) setTitle(initialTitle);
         return;
       }
       if (documentId) {
+        // 이미 동일한 documentId에 대해 내용을 적용한 적이 있으면 다시 적용하지 않음.
+        if (appliedDocumentIdRef.current === documentId) {
+          // already applied - skip to avoid overwriting unsaved edits
+          return;
+        }
+
         getDocument(documentId).then((doc) => {
           if (doc) {
             setTitle(doc.title);
             // 마크다운을 HTML로 변환해서 로드
             const htmlContent = markdownToHtml(doc.content);
+            console.log('Editor: setting content from getDocument for documentId=', documentId);
+            console.trace();
             editor.commands.setContent(htmlContent);
+            // mark that we've applied this document so transient re-renders won't reapply
+            appliedDocumentIdRef.current = documentId;
             // 첫 번째 탭의 documentId 설정
+            console.log('Editor: updating tabs with loaded document content');
+            console.trace();
             setTabs(tabs.map((tab, index) => 
               index === 0 ? { ...tab, documentId: documentId, content: htmlContent, title: doc.title } : tab
             ));
@@ -1539,6 +1620,8 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
           }
         });
       } else {
+        // no documentId - clear appliedDocumentIdRef so future loads can apply
+        appliedDocumentIdRef.current = null;
         setTitle('Untitled Document');
         editor.commands.setContent('');
         onDirtyChange?.(false);
@@ -2038,17 +2121,8 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       
       if (hasChanges) {
         // 변경사항이 있는 경우에만 탭 내용 업데이트
-        updateTabs((prev: any[]) => (prev || currentTabs).map(tab => 
-          tab.id === currentTab.id 
-            ? { 
-                ...tab, 
-                content: currentHtml,
-                isActive: false 
-              }
-            : { 
-                ...tab, 
-                isActive: tab.id === tabId 
-              }
+        updateTabs((prev: any[]) => (prev || currentTabs).map(tab =>
+          tab.id === currentTab.id ? { ...tab, content: currentHtml, isActive: false } : tab
         ));
       } else {
         // 변경사항이 없는 경우 isActive만 업데이트
@@ -2069,9 +2143,13 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
         // Markdown인 경우 HTML로 변환하여 표시
         try {
           const htmlContent = markdownToHtml(newActiveTab.content);
+          console.log('Editor: setting content for tab click from markdown, tabId=', newActiveTab.id);
+          console.trace();
           editor.commands.setContent(htmlContent);
         } catch (error) {
           console.error('Error rendering markdown:', error);
+          console.log('Editor: setting content for tab click fallback, tabId=', newActiveTab.id);
+          console.trace();
           editor.commands.setContent(newActiveTab.content);
         }
       } else {
@@ -2125,6 +2203,8 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       if (newActiveTab) {
         updateActiveTabId(newActiveTab.id);
         if (editor) {
+          console.log('Editor: setting content for performCloseTab, tabId=', newActiveTab.id);
+          console.trace();
           editor.commands.setContent(newActiveTab.content || '');
           setTitle(newActiveTab.title);
         }
@@ -2175,6 +2255,8 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
     updateActiveTabId(newTabId);
     setTitle('Untitled Document');
     if (editor) {
+      console.log('Editor: setting content empty for new tab');
+      console.trace();
       editor.commands.setContent('');
     }
   };
@@ -2742,7 +2824,8 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
 
     // Replace selected text with AI response
     try {
-      editor.chain().focus().setTextSelection({ from: safeFrom, to: safeTo }).insertContent(htmlContent).run();
+      // Wrap inserted HTML with a span that forces the applied highlight
+      editor.chain().focus().setTextSelection({ from: safeFrom, to: safeTo }).insertContent(`<span class="ai-selection-applied">${htmlContent}</span>`).run();
 
       // After insertion, compute the applied range using the editor's current selection
       const appliedFrom = Math.max(0, safeFrom);
@@ -2757,11 +2840,37 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       }
 
       try {
-        scheduleAiSelectionDispatch(appliedFrom, appliedTo);
+        scheduleAiSelectionDispatch(appliedFrom, appliedTo, true);
       } catch (err) {
         console.warn('Failed to schedule aiSelection dispatch', err);
       }
 
+      // Compute position for inline accept/reject buttons (relative to editor container)
+      try {
+        const startCoords = editor.view.coordsAtPos(appliedFrom);
+        const endCoords = editor.view.coordsAtPos(appliedTo);
+        const editorContainerEl = editorContainerRef.current as HTMLElement | null;
+        if (editorContainerEl) {
+          const editorRect = editorContainerEl.getBoundingClientRect();
+          const scrollLeft = editorContainerEl.scrollLeft || 0;
+          const scrollTop = editorContainerEl.scrollTop || 0;
+          const x = Math.round((endCoords.left - editorRect.left) + scrollLeft - 8);
+          const y = Math.round((startCoords.top - editorRect.top) + scrollTop - 36);
+          console.debug('applyAIResponse: initial pendingAiPos', { x: Math.max(8, x), y: Math.max(8, y) });
+          setPendingAiPos({ x: Math.max(8, x), y: Math.max(8, y) });
+        } else {
+          // Fallback to viewport coords
+          const x = Math.round(endCoords.left + window.scrollX - 8);
+          const y = Math.round(startCoords.top + window.scrollY - 36);
+          console.debug('applyAIResponse: fallback pendingAiPos (viewport)', { x, y });
+          setPendingAiPos({ x, y });
+        }
+      } catch (err) {
+        console.warn('Failed to compute pendingAiPos', err);
+        setPendingAiPos(null);
+      }
+
+      console.debug('applyAIResponse: setting pendingAiChange', { from: appliedFrom, to: appliedTo, originalLength: original.length, replacementLength: resp.length });
       setPendingAiChange({ from: appliedFrom, to: appliedTo, original, replacement: resp });
       // keep aiResponse visible until accepted/rejected
       toast.success('AI 응답이 문서에 적용되었습니다. 변경을 검토하세요.');
@@ -2806,7 +2915,7 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
   useImperativeHandle(ref, () => ({
     handleSave,
     saveEditorStateToCookie,
-    replaceSelection: (text: string) => {
+    replaceSelection: (text: string, range?: { from: number; to: number }) => {
       if (!editor) {
         console.warn('Editor: replaceSelection called but editor instance is null');
         return;
@@ -2816,6 +2925,14 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
         return;
       }
       try {
+        // If caller provided an explicit range, set the editor selection to that range first
+        if (range && typeof range.from === 'number' && typeof range.to === 'number') {
+          try {
+            editor.chain().focus().setTextSelection({ from: range.from, to: range.to }).run();
+          } catch (err) {
+            try { editor.commands.setTextSelection({ from: range.from, to: range.to }); } catch (_) { /* ignore */ }
+          }
+        }
         // Protect against accidental global clears by explicitly
         // replacing only the current selection range. If the selection
         // is collapsed and the replacement text is empty, do nothing.
@@ -2827,13 +2944,164 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
           console.warn('Editor: replaceSelection noop (collapsed selection + empty text)');
           return;
         }
+        // Read original text for potential revert and pending-change UX
+        let original = '';
+        try {
+          original = editor.state.doc.textBetween(safeFrom, safeTo);
+        } catch (err) {
+          console.warn('Editor.replaceSelection: failed to read original textBetween', err);
+          original = '';
+        }
+
         // Ensure we set the selection then delete it and insert the new text
         // which guarantees we only modify the selected range.
         try {
-          editor.chain().focus().setTextSelection({ from: safeFrom, to: safeTo }).deleteSelection().insertContent(text).run();
-        } catch (e) {
-          // Fallback if setTextSelection isn't available; try deleteSelection+insert
-          editor.chain().focus().deleteSelection().insertContent(text).run();
+          // Detect whether the incoming text is HTML (contains tags).
+          // If so, insert as HTML to preserve formatting; otherwise insert
+          // as plain text to avoid accidental HTML rendering.
+          const isHtml = /<[^>]+>/.test(text);
+          if (isHtml) {
+            try {
+              editor.chain().focus().setTextSelection({ from: safeFrom, to: safeTo }).deleteSelection().run();
+              // insertContent will accept HTML strings and convert them into
+              // the editor's document structure.
+              editor.chain().focus().insertContent(text).run();
+            } catch (e) {
+              try {
+                editor.chain().focus().deleteSelection().run();
+                editor.chain().focus().insertContent(text).run();
+              } catch (inner) {
+                console.warn('Editor.replaceSelection: HTML insert fallback failed', inner);
+                editor.chain().focus().insertContent(text).run();
+              }
+            }
+          } else {
+            try {
+              // Plain text insertion (safest approach for unformatted text)
+              editor.chain().focus().setTextSelection({ from: safeFrom, to: safeTo }).deleteSelection().run();
+              if (editor.commands && (editor.commands as any).insertText) {
+                (editor.commands as any).insertText(text);
+              } else {
+                editor.chain().focus().insertContent(text).run();
+              }
+            } catch (e) {
+              // Fallback if setTextSelection isn't available; try deleteSelection+insertText
+              try {
+                editor.chain().focus().deleteSelection().run();
+                if (editor.commands && (editor.commands as any).insertText) {
+                  (editor.commands as any).insertText(text);
+                } else {
+                  editor.chain().focus().insertContent(text).run();
+                }
+              } catch (inner) {
+                // Last-resort fallback: insert content as-is
+                editor.chain().focus().insertContent(text).run();
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Editor.replaceSelection: text insertion failed, attempting raw insert', err);
+          try {
+            editor.chain().focus().insertContent(text).run();
+          } catch (e) {
+            console.error('Editor.replaceSelection: final fallback insert failed', e);
+          }
+        }
+
+        // After insertion, compute applied range and schedule highlight + pending change
+        try {
+          const appliedFrom = Math.max(0, safeFrom);
+          let appliedTo = appliedFrom;
+          try {
+            const sel = editor.state.selection;
+            appliedTo = typeof sel.to === 'number' ? sel.to : appliedFrom + text.length;
+          } catch (err) {
+            appliedTo = appliedFrom + text.length;
+          }
+
+          try {
+            scheduleAiSelectionDispatch(appliedFrom, appliedTo);
+          } catch (err) {
+            console.warn('Editor.replaceSelection: failed to schedule highlight', err);
+          }
+
+          // Set pending AI change so user can accept/reject from the editor
+          try {
+            console.debug('Editor.replaceSelection: setting pendingAiChange', { from: appliedFrom, to: appliedTo, originalLength: original.length, replacementLength: text.length });
+            setPendingAiChange({ from: appliedFrom, to: appliedTo, original, replacement: text });
+            toast.success('AI 응답이 문서에 적용되었습니다. 변경을 검토하세요.');
+
+            // Also schedule an applied aiSelection so plugin can render applied-style decoration
+            try {
+              scheduleAiSelectionDispatch(appliedFrom, appliedTo, true);
+            } catch (err) {
+              console.warn('Editor.replaceSelection: failed to schedule applied highlight', err);
+            }
+
+            // Compute on-screen position for inline accept/reject buttons
+            try {
+              const coords = (editor.view as any).coordsAtPos(appliedFrom);
+              const editorContainerEl = editorContainerRef.current as HTMLElement | null;
+              if (editorContainerEl && coords) {
+                const editorRect = editorContainerEl.getBoundingClientRect();
+                const scrollLeft = editorContainerEl.scrollLeft || 0;
+                const scrollTop = editorContainerEl.scrollTop || 0;
+                const x = Math.round(coords.left - editorRect.left + scrollLeft);
+                const y = Math.round(coords.top - editorRect.top + scrollTop - 28);
+                console.debug('Editor.replaceSelection: initial pendingAiPos', { x, y });
+                setPendingAiPos({ x, y });
+              } else if (coords) {
+                console.debug('Editor.replaceSelection: fallback pendingAiPos (viewport)', { left: coords.left, top: coords.top });
+                setPendingAiPos({ x: Math.round(coords.left), y: Math.round(coords.top - 28) });
+              }
+            } catch (err) {
+              console.warn('Editor.replaceSelection: failed to compute pendingAiPos', err);
+              setPendingAiPos(null);
+            }
+
+            // Robust fallback: try to compute position from the actual applied DOM
+            // element (either the inserted span or the decoration DOM) after layout.
+            // This helps when coordsAtPos-based positioning is off due to container
+            // ref differences or timing.
+            try {
+              window.setTimeout(() => {
+                try {
+                  const editorDom = editor.view?.dom as HTMLElement | null;
+                  if (!editorDom) return;
+                  // Prefer the applied span inserted as fallback, then decoration class
+                  const appliedEl = editorDom.querySelector('.ai-selection-applied') as HTMLElement | null
+                    || editorDom.querySelector('.ai-selection-highlight') as HTMLElement | null;
+                  if (appliedEl) {
+                    const rect = appliedEl.getBoundingClientRect();
+                    const editorContainerEl2 = editorContainerRef.current as HTMLElement | null;
+                    if (editorContainerEl2) {
+                      const editorRect2 = editorContainerEl2.getBoundingClientRect();
+                      const scrollLeft2 = editorContainerEl2.scrollLeft || 0;
+                      const scrollTop2 = editorContainerEl2.scrollTop || 0;
+                      const x2 = Math.round(rect.left - editorRect2.left + scrollLeft2);
+                      const y2 = Math.round(rect.top - editorRect2.top + scrollTop2 - 28);
+                      console.debug('Editor.replaceSelection: computed pendingAiPos from DOM', { x2, y2, rect });
+                      setPendingAiPos({ x: x2, y: y2 });
+                    } else {
+                      // fallback to viewport coords
+                      const x2 = Math.round(rect.left);
+                      const y2 = Math.round(rect.top - 28);
+                      console.debug('Editor.replaceSelection: computed pendingAiPos from DOM (viewport)', { x2, y2, rect });
+                      setPendingAiPos({ x: x2, y: y2 });
+                    }
+                  }
+                } catch (err) {
+                  // ignore
+                }
+              }, 80);
+            } catch (err) {
+              // ignore
+            }
+          } catch (err) {
+            console.warn('Editor.replaceSelection: failed to set pendingAiChange', err);
+          }
+        } catch (err) {
+          console.warn('Editor.replaceSelection: post-insert processing failed', err);
         }
       } catch (err) {
         console.error('Editor: replaceSelection failed', err);
@@ -2897,11 +3165,31 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
 
   // Editor API가 준비되면 부모에게 알림
   useEffect(() => {
-    if (onApiReady && ref && typeof ref === 'object' && 'current' in ref && ref.current) {
-      console.log('Editor: onApiReady called with API:', ref.current);
-      onApiReady(ref.current);
+    // Forward the API to parent only when it becomes available or changes.
+    // Use module-level ref to remember the last forwarded API object.
+    if (onApiReady && ref && typeof ref === 'object' && 'current' in ref) {
+      const apiObj = (ref as any).current;
+      if (apiObj && __forwardedEditorApiRef.current !== apiObj) {
+        console.log('Editor: onApiReady called with API:', apiObj);
+        try {
+          onApiReady(apiObj);
+          __forwardedEditorApiRef.current = apiObj;
+        } catch (e) {
+          console.error('Editor: onApiReady callback threw', e);
+        }
+      }
     }
-  }, [onApiReady]);
+
+    return () => {
+      // Notify parent that editor is unmounting so it can clear refs if needed.
+      try {
+        if (onApiReady) onApiReady(null);
+      } catch (e) {
+        // ignore
+      }
+    };
+  // Only re-run when onApiReady or ref changes
+  }, [onApiReady, ref]);
 
   if (!editor) {
     return null;
@@ -2957,19 +3245,8 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
         onSummarize={(length) => handleSummarize(length)}
         onRewrite={(tone) => handleRewrite(tone)}
       />
-      {/* Pending AI change accept/reject (top-right) */}
-      {pendingAiChange && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2">
-          <button
-            onClick={acceptPendingAiChange}
-            className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-green-700"
-          >수락</button>
-          <button
-            onClick={rejectPendingAiChange}
-            className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-red-700"
-          >거절</button>
-        </div>
-      )}
+      {/* Pending AI change accept/reject inline near applied block (falls back to top-right) */}
+      {/* NOTE: this block is rendered later inside the editor container to position absolutely relative to it. */}
         {/* Summarize modal */}
         {showSummaryModal && (
           <Modal
@@ -3176,6 +3453,37 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
             editor={editor} 
             className="h-full [&_.ProseMirror]:outline-none [&_.ProseMirror]:leading-relaxed [&_.ProseMirror]:text-sm sm:[&_.ProseMirror]:text-base [&_.ProseMirror]:max-w-none [&_.ProseMirror]:border-0 [&_.ProseMirror]:focus:outline-none [&_.ProseMirror]:p-6 [&_.ProseMirror]:min-h-full [&_.ProseMirror]:overflow-y-visible [&_.ProseMirror]:pb-32 [&_.ProseMirror]:text-gray-900 [&_.ProseMirror]:dark:text-gray-100" 
           />
+        )}
+        {/* Pending AI change accept/reject inline near applied block (falls back to top-right) - rendered inside editor container */}
+        {pendingAiChange && (
+          <>
+            {pendingAiPos ? (
+              <div
+                className="absolute z-50 flex items-center gap-2"
+                style={{ left: pendingAiPos.x, top: pendingAiPos.y }}
+              >
+                <button
+                  onClick={acceptPendingAiChange}
+                  className="px-2 py-1 bg-green-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-green-700"
+                >수락</button>
+                <button
+                  onClick={rejectPendingAiChange}
+                  className="px-2 py-1 bg-red-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-red-700"
+                >거절</button>
+              </div>
+            ) : (
+              <div className="absolute right-6 top-6 z-50 flex items-center gap-2">
+                <button
+                  onClick={acceptPendingAiChange}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-green-700"
+                >수락</button>
+                <button
+                  onClick={rejectPendingAiChange}
+                  className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-red-700"
+                >거절</button>
+              </div>
+            )}
+          </>
         )}
         
         {showSlashMenu && isEditorReady && (
@@ -3396,33 +3704,117 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       
       {/* AI 요청 버튼 - 에디터 텍스트박스 우측 하단 고정 */}
       <button
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => {
-          // AI 버튼 클릭 시 선택된 텍스트를 캡처해서 Taskbar에 전달
-          if (editor) {
-            try {
+        type="button"
+        tabIndex={-1}
+        onMouseDown={(e) => {
+          // Prevent the button from stealing focus and capture selection immediately
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            // Capture DOM ranges first (before mouseup/blur)
+            const winSel = window.getSelection();
+            if (winSel && winSel.rangeCount > 0) {
+              const saved: Range[] = [];
+              for (let i = 0; i < winSel.rangeCount; i++) {
+                saved.push(winSel.getRangeAt(i).cloneRange());
+              }
+              aiSavedRangesRef.current = saved;
+            } else {
+              aiSavedRangesRef.current = null;
+            }
+          } catch (err) {
+            aiSavedRangesRef.current = null;
+            console.warn('AI button mousedown: failed to capture DOM ranges', err);
+          }
+
+          try {
+            if (editor) {
               const { from, to } = editor.state.selection;
               const selectedText = getSelectionAsMarkdown(from, to);
-              console.log('Editor: AI button clicked, selection:', { from, to, selectedText });
-                  if (selectedText && selectedText.trim()) {
-                  setSelectedTextForAI({ from, to, text: selectedText });
-                  // dispatch highlight without changing focus and schedule retries
-                  scheduleAiSelectionDispatch(from, to);
-                  setHighlightDisabled(false); // AI 버튼 클릭 시 하이라이트 활성화
-                  // AI 버튼 클릭 시 하이라이트 표시
+              if (selectedText && selectedText.trim()) {
+                setSelectedTextForAI({ from, to, text: selectedText });
+                scheduleAiSelectionDispatch(from, to);
+                setHighlightDisabled(false);
+                aiSavedEditorSelectionRef.current = { from, to };
               } else {
                 setSelectedTextForAI(null);
                 setHighlightDisabled(true);
+                aiSavedEditorSelectionRef.current = null;
               }
-            } catch (e) {
-              setSelectedTextForAI(null);
-              setHighlightDisabled(true);
             }
+          } catch (err) {
+            aiSavedEditorSelectionRef.current = null;
+            console.warn('AI button mousedown: failed to capture editor selection', err);
           }
-          onOpenTaskbar?.();
+
+          // Open the taskbar immediately on mousedown so the browser doesn't
+          // change focus due to the click. Restore the visual/editor selection
+          // shortly after to survive any UI focus events.
+          try {
+            onOpenTaskbar?.();
+          } catch (err) {
+            console.warn('AI button mousedown: onOpenTaskbar failed', err);
+          }
+
+          const prevActive = document.activeElement as HTMLElement | null;
+          // Attempt aggressive restoration: schedule multiple attempts to
+          // re-apply editor selection and DOM ranges so focus changes don't
+          // permanently clear the visual highlight.
+          const restoreAttempt = (delay: number) => {
+            const id = window.setTimeout(() => {
+              try {
+                const saved = aiSavedEditorSelectionRef.current;
+                if (saved && editor) {
+                  try {
+                    editor.chain().focus().setTextSelection({ from: saved.from, to: saved.to }).run();
+                  } catch (e) {
+                    try { editor.commands.setTextSelection({ from: saved.from, to: saved.to }); } catch (err) { /* ignore */ }
+                  }
+                }
+
+                const ranges = aiSavedRangesRef.current;
+                if (ranges && ranges.length) {
+                  const s = window.getSelection();
+                  if (s) {
+                    s.removeAllRanges();
+                    for (const r of ranges) {
+                      try { s.addRange(r); } catch (e) { /* ignore invalid range */ }
+                    }
+                  }
+                }
+
+                if (prevActive && document.activeElement !== prevActive) {
+                  try { prevActive.focus(); } catch (e) { /* ignore */ }
+                }
+              } catch (err) {
+                console.warn('AI button mousedown: restore attempt failed', err);
+              }
+            }, delay);
+            aiSelectionTimersRef.current.push(id);
+          };
+
+          // schedule several staggered restores
+          restoreAttempt(40);
+          restoreAttempt(160);
+          restoreAttempt(400);
+          restoreAttempt(800);
+
+          // cleanup saved refs after attempts
+          const cleanupId = window.setTimeout(() => {
+            aiSavedRangesRef.current = null;
+            aiSavedEditorSelectionRef.current = null;
+          }, 2500);
+          aiSelectionTimersRef.current.push(cleanupId);
         }}
+        onClick={(e) => {
+          // no-op click handler to avoid default click focusing behavior
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onFocus={(e) => { e.currentTarget.blur(); }}
         className="absolute bottom-12 right-12 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-full p-4 shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl z-50"
         title="AI 어시스턴트"
+        aria-label="Open AI assistant"
       >
         <Robot size={24} />
       </button>
@@ -3453,7 +3845,7 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       {/* 선택 메뉴 버튼 */}
       {showSelectionMenu && !showMenuPopup && (
         <div
-          className="fixed z-50"
+          className="absolute z-50"
           style={{
             top: selectionMenuPos.y + 'px',
             left: selectionMenuPos.x + 'px',
@@ -3473,7 +3865,7 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       {/* 선택 메뉴 팝업 */}
       {showMenuPopup && (
         <div
-          className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg py-1"
+          className="absolute z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg py-1"
           style={{
             top: selectionMenuPos.y + 30 + 'px', // 버튼 아래에
             left: selectionMenuPos.x + 'px',

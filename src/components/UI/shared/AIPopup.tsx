@@ -53,9 +53,18 @@ const AIPopup: React.FC<AIPopupProps> = ({ isOpen, onClose, onSendMessage, isLoa
 
   // 팝업이 열릴 때 입력창에 포커스
   useEffect(() => {
+    let t: number | undefined;
     if (isOpen) {
-      inputRef.current?.focus();
+      // Delay focusing the input to avoid stealing selection/focus
+      // from the editor when the popup is opened (e.g. via AI button).
+      t = window.setTimeout(() => {
+        inputRef.current?.focus();
+      }, 300);
     }
+
+    return () => {
+      if (t !== undefined) window.clearTimeout(t);
+    };
   }, [isOpen]);
 
   // 메뉴 외부 클릭 감지

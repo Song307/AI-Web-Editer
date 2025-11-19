@@ -20,6 +20,7 @@ import Auth from './components/Auth';
 import { auth } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import './App.css';
+import { markdownToHtml } from './utils/converter';
 
 function App() {
   return (
@@ -80,7 +81,9 @@ function AppContent() {
   const [selectionPreview, setSelectionPreview] = useState<string | null>(null);
   const [selectionRange, setSelectionRange] = useState<{ from: number; to: number } | null>(null);
   const workspaceApiRef = React.useRef<{
-    replaceSelection?: (text: string) => void;
+    handleSave?: () => void;
+    saveEditorStateToCookie?: () => void;
+    replaceSelection?: (text: string, range?: { from: number; to: number }) => void;
     highlightSelection?: (from: number, to: number) => void;
     clearHighlight?: () => void;
     collapseSelection?: () => void;
@@ -125,6 +128,38 @@ function AppContent() {
         toast.error('대기 중이던 제안사항 적용에 실패했습니다.');
       }
       pendingReplacementRef.current = null;
+    }
+  }, []);
+
+  const applySuggestionToEditor = React.useCallback((text: string, contentType?: 'text' | 'html' | 'markdown') => {
+    // If contentType indicates markdown, convert to HTML before applying.
+    let payload = text;
+    try {
+      const looksLikeMarkdown = (contentType === 'markdown') || /(^#|\*\*|\* |^- |^\d+\.|`|\[.+\]\(.+\))/m.test(text);
+      if (looksLikeMarkdown && contentType !== 'html') {
+        try {
+          payload = markdownToHtml(text);
+        } catch (e) {
+          console.warn('App: markdownToHtml conversion failed, sending raw text', e);
+          payload = text;
+        }
+      }
+    } catch (e) {
+      payload = text;
+    }
+
+    if (workspaceApiRef.current?.replaceSelection) {
+      try {
+        workspaceApiRef.current.replaceSelection(payload);
+        toast.success('AI 제안이 문서에 적용되었습니다.');
+      } catch (e) {
+        console.error('App: failed to apply suggestion immediately', e);
+        toast.error('AI 제안 적용에 실패했습니다.');
+      }
+    } else {
+      // If editor API not ready, queue replacement
+      pendingReplacementRef.current = payload;
+      toast('에디터가 준비되면 제안이 자동으로 적용됩니다.');
     }
   }, []);
 
@@ -241,18 +276,38 @@ function AppContent() {
   };
 
   const openTaskbar = () => {
+    try {
+      // Persist editor state before opening UI that may cause a remount
+      workspaceApiRef.current?.saveEditorStateToCookie?.();
+    } catch (e) {
+      console.warn('App: failed to save editor state before opening taskbar', e);
+    }
     setIsRightSidebarOpen(true);
     // After opening the taskbar, restore focus back to the editor so the
     // browser doesn't clear the user's selection. Use a short timeout so the
     // sidebar render completes first.
+    // give the editor a bit more time to restore its internal selection
+    // (Editor also attempts to restore selection) before forcing focus.
     setTimeout(() => {
       try {
         workspaceApiRef.current?.focus?.();
       } catch (e) {
         console.warn('App: failed to restore editor focus after opening taskbar', e);
       }
-    }, 0);
+    }, 200);
   };
+
+  // When the menubar becomes visible, persist editor state to avoid losing
+  // unsaved content when UI layout changes.
+  useEffect(() => {
+    if (isMenubarVisible) {
+      try {
+        workspaceApiRef.current?.saveEditorStateToCookie?.();
+      } catch (e) {
+        console.warn('App: failed to save editor state on menubar visible change', e);
+      }
+    }
+  }, [isMenubarVisible]);
 
   // 우측 사이드바 리사이저 핸들러
   const handleRightMouseDown = (e: React.MouseEvent) => {
@@ -481,7 +536,7 @@ function AppContent() {
               <Route path="/image-editor" element={<ImageEditor />} />
               <Route path="/ai-secretary" element={<AISecretaryManager />} />
               <Route path="/ai-secretary/create" element={<AISecretaryCreator />} />
-              <Route path="/ai-assistant" element={<AIAssistantPage />} />
+              <Route path="/ai-assistant" element={<AIAssistantPage onApplySuggestion={applySuggestionToEditor} />} />
             </Routes>
           </div>
         </main>
@@ -520,14 +575,17 @@ function AppContent() {
             console.error('App: clearHighlight call failed', e);
           }
         }}
-        onReplaceSelection={(newText: string) => {
-          console.log('App: onReplaceSelection called, workspaceApiRef =', workspaceApiRef.current, 'newText=', newText);
+        onReplaceSelection={(newText: string, contentType?: 'text' | 'html' | 'markdown', range?: { from: number; to: number }) => {
+          console.log('App: onReplaceSelection called, workspaceApiRef =', workspaceApiRef.current, 'newText=', newText, 'contentType=', contentType, 'range=', range);
           // Ask the workspace/editor to replace the selected text. If the
           // editor API is not yet available, queue the replacement and notify
           // the user.
           if (workspaceApiRef.current && workspaceApiRef.current.replaceSelection) {
             try {
-              workspaceApiRef.current.replaceSelection(newText);
+              // Forward the newText as-is; Editor.replaceSelection will
+              // decide whether to treat it as HTML or plain text. If a range
+              // was provided, pass it so the editor can set the selection.
+              workspaceApiRef.current.replaceSelection(newText, range);
             } catch (e) {
               console.error('App: replaceSelection call failed', e);
               toast.error('텍스트 적용에 실패했습니다. 콘솔을 확인하세요.');

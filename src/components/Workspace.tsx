@@ -628,7 +628,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
   }, []);
 
   // When Editor registers its API, forward to parent and handle any pending focus requests
-  const handleEditorApiReady = (api: { replaceSelection?: (text: string) => void; highlightSelection?: (from: number, to: number) => void; clearHighlight?: () => void } | null) => {
+  const handleEditorApiReady = React.useCallback((api: { replaceSelection?: (text: string) => void; highlightSelection?: (from: number, to: number) => void; clearHighlight?: () => void } | null) => {
     try {
       if (onRegisterApi) onRegisterApi(api as any);
     } catch (err) {
@@ -646,7 +646,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
         console.warn('handleEditorApiReady: focus call failed', err);
       }
     }
-  };
+  }, [onRegisterApi]);
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900">

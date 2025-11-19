@@ -44,6 +44,31 @@
   box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.5);
 }
 
+/* Applied AI suggestion: yellow background for easy review */
+.ai-selection-applied {
+  background-color: #fff9c4; /* light yellow */
+  border-radius: 3px;
+  padding: 2px 0;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.15);
+}
+
+[data-theme="dark"] .ai-selection-applied {
+  background-color: rgba(255, 241, 118, 0.15);
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.08);
+}
+
+/* Stronger rule to ensure applied highlight is visible inside ProseMirror */
+.ProseMirror .ai-selection-applied {
+  background-color: #fff9c4 !important;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.15) !important;
+}
+
+/* Controls that appear near applied suggestions */
+.ai-apply-controls {
+  position: absolute;
+  z-index: 60;
+}
+
 @keyframes ai-selection-pulse {
   0%, 100% {
     opacity: 1;

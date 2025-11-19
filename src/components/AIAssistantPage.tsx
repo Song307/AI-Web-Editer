@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Stars, Paperclip, Image as ImageIcon, FileEarmarkPdf, Plus, Clipboard, X, Trash, ChatDots, ThreeDots } from 'react-bootstrap-icons';
+import { Send, Stars, Paperclip, Image as ImageIcon, FileEarmarkPdf, Plus, Clipboard, X, Trash, ChatDots, ThreeDots, FileText } from 'react-bootstrap-icons';
 import ReactMarkdown from 'react-markdown';
+import { markdownToHtml, sanitizeHtml } from '../utils/converter';
 import toast from 'react-hot-toast';
 import { generateAIResponse, researchTopic, analyzeText, generatePersonaFeedback, answerQuestion, analyzeImage } from '../utils/ai';
 import { saveAIConversation, getAIConversations, getAIConversation, updateAIConversation, deleteAIConversation, AIConversation, AIMessage } from '../utils/db';
@@ -21,7 +22,7 @@ interface UploadedFile {
   pageCount?: number;
 }
 
-const AIAssistantPage: React.FC = () => {
+const AIAssistantPage: React.FC<{ onApplySuggestion?: (text: string) => void }> = ({ onApplySuggestion }) => {
   const [currentSession, setCurrentSession] = useState<Message[]>([]);
   const [sessions, setSessions] = useState<AIConversation[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -40,6 +41,8 @@ const AIAssistantPage: React.FC = () => {
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
+  // track which assistant messages have been applied so we can update UI
+  const [appliedMessageIndexes, setAppliedMessageIndexes] = useState<number[]>([]);
 
   // 메시지가 변경될 때 세션 저장
   useEffect(() => {
@@ -59,7 +62,13 @@ const AIAssistantPage: React.FC = () => {
 
   // 페이지가 로드될 때 입력창에 포커스
   useEffect(() => {
-    inputRef.current?.focus();
+    // Delay focusing slightly to avoid stealing selection when opened
+    // from the editor (e.g. via AI button). Cleanup the timer on
+    // unmount to avoid leaks.
+    const t = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 300);
+    return () => window.clearTimeout(t);
   }, []);
 
   // 세션 목록 로드
@@ -356,11 +365,37 @@ const AIAssistantPage: React.FC = () => {
         }
       }
 
-      const aiMessage: Message = {
-        role: 'assistant',
-        content: response,
-        timestamp: new Date(),
-      };
+      // For 'request' tool, parse explanation + suggestedText using '---' separator
+      let aiMessage: Message;
+      if (selectedTool === 'request') {
+        const parts = response.split('---');
+        if (parts.length >= 2) {
+          const explanation = parts[0].trim();
+          const suggestedText = parts.slice(1).join('---').trim();
+          aiMessage = {
+            role: 'assistant',
+            content: explanation,
+            timestamp: new Date(),
+            tool: selectedTool || undefined,
+          } as Message & { suggestedText?: string };
+          // append suggestedText via a wrapper message object stored in session
+          (aiMessage as any).suggestedText = suggestedText;
+        } else {
+          aiMessage = {
+            role: 'assistant',
+            content: response,
+            timestamp: new Date(),
+            tool: selectedTool || undefined
+          };
+        }
+      } else {
+        aiMessage = {
+          role: 'assistant',
+          content: response,
+          timestamp: new Date(),
+          tool: selectedTool || undefined
+        };
+      }
 
       setCurrentSession(prev => [...prev, aiMessage]);
     } catch (error) {
@@ -571,11 +606,37 @@ const AIAssistantPage: React.FC = () => {
               )}
 
               {/* 메시지 버블 */}
-              <div className={`rounded-2xl px-4 py-3 ${
+              <div className={`relative rounded-2xl px-4 py-3 ${
                 message.role === 'user'
                   ? 'bg-indigo-600 text-white'
                   : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700'
               }`}>
+                {/* assistant 메시지에 suggestedText가 있으면 적용 버튼을 표시 */}
+                {message.role === 'assistant' && (message as any).suggestedText && (
+                  <div className="absolute top-2 right-2 z-10">
+                    {appliedMessageIndexes.includes(index) ? (
+                      <span className="text-xs text-green-700 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">적용됨</span>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          try {
+                            const suggested = (message as any).suggestedText as string;
+                            console.debug('AIAssistantPage: apply suggestedText', { index, suggested });
+                            if (onApplySuggestion) onApplySuggestion(suggested);
+                            setAppliedMessageIndexes(prev => [...prev, index]);
+                          } catch (err) {
+                            console.error('AIAssistantPage: failed to apply suggestion', err);
+                            toast.error('제안 적용 중 오류가 발생했습니다.');
+                          }
+                        }}
+                        className="text-xs bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 px-2 py-1 rounded shadow-sm hover:brightness-95"
+                      >
+                        적용
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div className="prose prose-sm max-w-none dark:prose-invert
                   [&_p]:mb-3 [&_p]:last:mb-0
                   [&_ul]:mb-3 [&_ol]:mb-3
@@ -650,7 +711,56 @@ const AIAssistantPage: React.FC = () => {
                     {message.content}
                   </ReactMarkdown>
                 </div>
-                
+
+                {/* 제안된 텍스트 표시 (요청 도구) */}
+                {(message as any).suggestedText && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                    <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">제안된 변경사항</div>
+                    <div className="bg-gray-50 dark:bg-gray-700 p-2 rounded-lg">
+                      <div className="text-sm break-words text-gray-900 dark:text-gray-100 mb-3 prose prose-sm dark:prose-invert max-w-none">
+                        <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(markdownToHtml((message as any).suggestedText || '')) }} />
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 flex items-center justify-between px-3 py-1 pt-1 border-t border-gray-200 dark:border-gray-600 rounded-b-lg -m-2 mt-3">
+                        <div className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                          <FileText size={12} /> AI 제안
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {appliedMessageIndexes.includes(index) ? (
+                            <span className="text-xs font-medium text-green-600 dark:text-green-400">적용됨.</span>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  try {
+                                    const suggested = (message as any).suggestedText as string;
+                                    if (onApplySuggestion) onApplySuggestion(suggested);
+                                    setAppliedMessageIndexes(prev => [...prev, index]);
+                                    toast.success('제안 적용 요청을 보냈습니다.');
+                                  } catch (err) {
+                                    console.error('AIAssistantPage: apply error', err);
+                                    toast.error('제안 적용에 실패했습니다.');
+                                  }
+                                }}
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
+                              >
+                                수락
+                              </button>
+                              <button
+                                onClick={() => {
+                                  toast.success('변경사항이 거절되었습니다.');
+                                }}
+                                className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-medium rounded-md transition-colors"
+                              >
+                                거절
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* 첨부 파일 표시 */}
                 {message.files && message.files.length > 0 && (
                   <div className="mt-3 space-y-2">

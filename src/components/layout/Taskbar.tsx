@@ -4,6 +4,7 @@ import { Paperclip, X, Stars, Trash, Clipboard, ArrowsFullscreen, FileEarmarkPdf
 import ReactMarkdown from 'react-markdown';
 import toast from 'react-hot-toast';
 import { generateAIResponse } from '../../utils/ai';
+import { markdownToHtml, sanitizeHtml } from '../../utils/converter';
 import { saveAIConversation, getAIConversations, getAIConversation, updateAIConversation, deleteAIConversation, AIConversation, AIMessage } from '../../utils/db';
 
 interface Message {
@@ -45,7 +46,7 @@ interface TaskbarProps {
   selectionPreview?: string | null,
   selectionRange?: { from: number; to: number } | null,
   onClearSelection?: () => void,
-  onReplaceSelection?: (newText: string) => void,
+  onReplaceSelection?: (newText: string, contentType?: 'text' | 'html' | 'markdown', range?: { from: number; to: number }) => void,
   onHighlightSelection?: (from: number, to: number) => void,
   onClearHighlight?: () => void,
   documentTitle?: string,
@@ -659,21 +660,9 @@ const Taskbar: React.FC<TaskbarProps> = ({
           toolPrompt = '이미지 분석 요청입니다. 이미지의 내용을 자세히 설명해주세요.\n\n';
           break;
         case 'request':
-          toolPrompt = `텍스트 수정 요청입니다. 사용자가 선택한 텍스트를 다른 내용으로 변경해달라는 요청입니다.
-
-다음 형식으로 응답해주세요:
-
-1. 먼저 요청에 대한 간단한 설명이나 답변
-2. 그 다음에 ---구분선---
-3. 변경된 텍스트만 (다른 설명 없이 순수 텍스트만)
-
-예시:
-이 텍스트를 더 전문적으로 바꿔보겠습니다.
-
----
-더 전문적인 버전의 텍스트가 여기에 옵니다.
-
-응답 형식을 엄격히 지켜주세요. 변경된 텍스트는 ---구분선--- 아래에 순수 텍스트로만 작성해주세요.\n\n`;
+          // Ask the model to return the replacement in Markdown and preserve
+          // headings, bold, lists, links, etc. The UI will render Markdown.
+          toolPrompt = `텍스트 수정 요청입니다. 사용자가 선택한 텍스트를 다른 내용으로 변경해달라는 요청입니다.\n\n응답 형식: 반드시 Markdown으로 제공해주세요. 제목(#), 굵게(**bold**), 기울임(*italic*), 순서/비순서 목록(- 또는 *), 링크([text](url)) 등을 사용하여 포맷을 유지하세요.\n\n다음 형식으로 응답해주세요:\n\n1. 먼저 요청에 대한 간단한 설명이나 답변\n2. 그 다음에 ---구분선---\n3. 변경된 텍스트(마크다운 형식)만 --- 아래에 작성해주세요.\n\n예시:\n이 텍스트를 더 전문적으로 바꿔보겠습니다.\n\n---\n**더 전문적인 버전의 텍스트가 여기에 옵니다.**\n\n응답 형식을 엄격히 지켜주세요. 변경된 텍스트는 ---구분선--- 아래에 Markdown으로만 작성해주세요.\n\n`;
           break;
       }
       finalMessage = toolPrompt + finalMessage;
@@ -738,6 +727,29 @@ const Taskbar: React.FC<TaskbarProps> = ({
       }
       
       setMessages(prev => [...prev, aiMessage]);
+      // If AI provided a suggestedText for a request and there's a selection,
+      // apply it immediately to the editor and mark the message as applied.
+      try {
+        if (aiMessage.suggestedText && selectionRange && selectionRange.from != null) {
+          // Convert Markdown suggestion to HTML before asking parent to apply.
+          // The editor will insert HTML content to preserve headings, bold, lists, etc.
+          const converted = markdownToHtml(aiMessage.suggestedText);
+          // Ask parent (App) to replace selection. App will forward to Editor API.
+          if (onReplaceSelection) {
+            onReplaceSelection(converted, 'html', selectionRange || undefined);
+          }
+          // Mark message applied in the Taskbar UI
+          const targetTs = aiMessage.timestamp ? +new Date(aiMessage.timestamp as any) : null;
+          if (targetTs) {
+            setMessages(prevMessages => prevMessages.map(msg => {
+              const msgTs = msg.timestamp ? +new Date(msg.timestamp as any) : null;
+              return msgTs === targetTs ? { ...msg, applied: true, documentName: documentTitle } : msg;
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn('Taskbar: auto-apply suggestedText failed', err);
+      }
       
       // AI 응답 후에도 하이라이트는 유지 (변경사항 적용 시까지)
     } catch (error) {
@@ -1277,7 +1289,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
                                 선택된 텍스트
                               </div>
                               <div className="text-sm break-words leading-relaxed prose prose-sm dark:prose-invert max-w-none">
-                                <ReactMarkdown>{message.selectionPreview}</ReactMarkdown>
+                                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(markdownToHtml(message.selectionPreview || '')) }} />
                               </div>
                             </div>
                           )}
@@ -1396,7 +1408,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
                               </div>
                               <div className="bg-gray-50 dark:bg-gray-700 p-2 rounded-lg">
                                 <div className="text-sm break-words text-gray-900 dark:text-gray-100 mb-3 prose prose-sm dark:prose-invert max-w-none">
-                                  <ReactMarkdown>{message.suggestedText}</ReactMarkdown>
+                                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(markdownToHtml(message.suggestedText || '')) }} />
                                 </div>
                                 <div className="bg-blue-50 dark:bg-blue-900/20 flex items-center justify-between px-3 py-1 pt-1 border-t border-gray-200 dark:border-gray-600 rounded-b-lg -m-2 mt-3">
                                   <div className="text-xs font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
@@ -1502,7 +1514,16 @@ const Taskbar: React.FC<TaskbarProps> = ({
                           // Then request replacement (App will queue if editor not ready)
                           if (onReplaceSelection && replaceNewText) {
                             console.log('Taskbar: confirm apply replaceNewText=', replaceNewText);
-                            onReplaceSelection(replaceNewText);
+                            // If the replace text looks like markdown, convert to HTML
+                            let payload = replaceNewText;
+                            try {
+                              const looksLikeMd = /(^#|\*\*|\* |^- |^\d+\.|`|\[.+\]\(.+\))/m.test(replaceNewText);
+                              if (looksLikeMd) payload = markdownToHtml(replaceNewText);
+                            } catch (e) {
+                              // fallback to raw
+                              payload = replaceNewText;
+                            }
+                            onReplaceSelection(payload, 'html', selectionRange || undefined);
                             toast.success('제안사항이 적용 요청되었습니다.');
                           } else {
                             toast.error('적용할 수 없습니다. 편집기 연결이 없습니다.');
@@ -1593,7 +1614,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
                           <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words max-h-32 overflow-y-auto p-2 leading-relaxed" dangerouslySetInnerHTML={{ __html: selectionPreview }} />
                         ) : (
                           <div className="text-sm text-gray-700 dark:text-gray-300 break-words max-h-32 overflow-y-auto p-2 leading-relaxed prose prose-sm dark:prose-invert max-w-none">
-                            <ReactMarkdown>{selectionPreview}</ReactMarkdown>
+                            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(markdownToHtml(selectionPreview || '')) }} />
                           </div>
                         )}
                       </div>
