@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import { Carousel, CarouselContent, CarouselItem } from "../../components/ui/carousel";
-import { Button } from "../../components/ui/button";
+import { Carousel, CarouselContent, CarouselItem } from "../ui/carousel";
+import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
 import { Image, Type, Table, Code, Calculator, Palette } from "react-bootstrap-icons";
 
