@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { House, ClipboardCheck, Database, Palette, Robot, ChatDots, Gear, PinAngle, PinAngleFill } from 'react-bootstrap-icons';
+import { signOut } from 'firebase/auth';
+import { auth } from '../../firebase';
+import { User } from 'firebase/auth';
 
 interface MenubarProps {
   isDarkMode: boolean;
   language: 'ko' | 'en';
   isCompactLayout: boolean;
+  user: User | null;
   onHoverChange?: (isHovered: boolean) => void;
   // notify parent when menubar visibility changes (shown/hidden)
   onVisibleChange?: (visible: boolean) => void;
 }
 
-const Menubar: React.FC<MenubarProps> = ({ isDarkMode, language, isCompactLayout, onHoverChange, onVisibleChange }) => {
+const Menubar: React.FC<MenubarProps> = ({ isDarkMode, language, isCompactLayout, user, onHoverChange, onVisibleChange }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isHidden, setIsHidden] = useState(() => {
@@ -46,21 +50,21 @@ const Menubar: React.FC<MenubarProps> = ({ isDarkMode, language, isCompactLayout
       label: language === 'ko' ? '저장소' : 'Storage',
       path: '/storage',
     },
-    {
-      icon: Palette,
-      label: language === 'ko' ? '이미지 편집' : 'Image Editor',
-      path: '/image-editor',
-    },
-    {
-      icon: Robot,
-      label: language === 'ko' ? 'AI 비서' : 'AI Secretary',
-      path: '/ai-secretary',
-    },
+    // {
+    //   icon: Palette,
+    //   label: language === 'ko' ? '이미지 편집' : 'Image Editor',
+    //   path: '/image-editor',
+    // },
+    // {
+    //   icon: Robot,
+    //   label: language === 'ko' ? 'AI 비서' : 'AI Secretary',
+    //   path: '/ai-secretary',
+    // },
     {
       icon: ChatDots,
       label: language === 'ko' ? 'AI 어시스턴트' : 'AI Assistant',
       path: '/ai-assistant',
-    },
+    }
   ];
 
   const isActive = (path: string) => {
@@ -69,6 +73,15 @@ const Menubar: React.FC<MenubarProps> = ({ isDarkMode, language, isCompactLayout
 
   const handleNavigation = (path: string) => {
     navigate(path);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      alert('로그아웃 완료!');
+    } catch (error) {
+      alert('로그아웃 실패: ' + (error as Error).message);
+    }
   };
 
   // Show when not hidden or when hovered (both layouts). For spaced layout we'll
@@ -152,6 +165,28 @@ const Menubar: React.FC<MenubarProps> = ({ isDarkMode, language, isCompactLayout
 
         {/* Bottom Section - 설정 & 숨기기 버튼 */}
         <div className="flex flex-col gap-2 items-center mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+          {/* 로그아웃 버튼 */}
+          {user && (
+            <div className="relative group">
+              <button
+                onClick={handleLogout}
+                className="flex items-center justify-center w-12 h-12 rounded-lg cursor-pointer transition-all text-gray-700 dark:text-gray-200 hover:bg-red-100 dark:hover:bg-red-900 hover:text-red-600 dark:hover:text-red-400"
+                title={language === 'ko' ? '로그아웃' : 'Logout'}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16,17 21,12 16,7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+              </button>
+              {/* Custom Tooltip */}
+              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-sm rounded-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-[100] shadow-lg">
+                {language === 'ko' ? '로그아웃' : 'Logout'}
+                <div className="absolute right-full top-1/2 -translate-y-1/2 mr-[-1px] border-[6px] border-transparent border-r-gray-900 dark:border-r-gray-700"></div>
+              </div>
+            </div>
+          )}
+
           {/* 설정 버튼 */}
           <div className="relative group">
             <button

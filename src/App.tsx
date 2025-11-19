@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import Workspace from './components/Workspace';
 import ClipboardPage from './components/ui/shared/ClipboardPage';
@@ -15,6 +15,10 @@ import { initDB } from './utils/db';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import LandingPage from './components/LandingPage';
+import LoginPage from './components/LoginPage';
+import Auth from './components/Auth';
+import { auth } from './firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import './App.css';
 
 function App() {
@@ -29,6 +33,8 @@ function App() {
 }
 
 function AppContent() {
+  const location = useLocation();
+  const isLoginPage = location.pathname === '/login';
   const [isMenubarHidden, setIsMenubarHidden] = useState(() => {
     const saved = localStorage.getItem('isMenubarHidden');
     return saved ? JSON.parse(saved) : false;
@@ -48,6 +54,8 @@ function AppContent() {
     return saved ? parseInt(saved) : 320;
   });
   const [isResizingRight, setIsResizingRight] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('isDarkMode');
     return saved ? JSON.parse(saved) : false;
@@ -284,36 +292,50 @@ function AppContent() {
     };
   }, [isResizingRight]);
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   return (
     <div className={`flex h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 transition-colors ${isCompactLayout ? '' : 'p-4 gap-4'}`}>
       
-      {/* 좌측 메뉴바 */}
-      <Menubar 
-        isDarkMode={isDarkMode}
-        language={language}
-        isCompactLayout={isCompactLayout}
-        onHoverChange={setIsMenubarHoveredWhileHidden}
-        onVisibleChange={setIsMenubarVisible}
-      />
+      {/* 좌측 메뉴바 - 로그인 페이지에서는 숨김 */}
+      {!isLoginPage && (
+        <Menubar 
+          isDarkMode={isDarkMode}
+          language={language}
+          isCompactLayout={isCompactLayout}
+          user={user}
+          onHoverChange={setIsMenubarHoveredWhileHidden}
+          onVisibleChange={setIsMenubarVisible}
+        />
+      )}
       
-      {/* 우측 상단 고정 토글 버튼 */}
-      {!isRightSidebarOpen && (
-        <button
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={openTaskbar}
-          className="fixed top-6 right-10 z-50 p-1 bg-transparent hover:bg-transparent transition-none"
-          title="AI 채팅 열기"
-          aria-label="Open AI chat"
-        >
-          <svg
-            className="w-6 h-6 text-gray-700 dark:text-gray-300"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      {/* 우측 상단 고정 토글 버튼 - Dashboard와 Workspace에서만 표시 */}
+      {!isLoginPage && !isRightSidebarOpen && (
+        (location.pathname === '/dashboard' || location.pathname.startsWith('/workspace') || location.pathname.startsWith('/documents')) && (
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={openTaskbar}
+            className="fixed top-6 right-10 z-50 p-1 bg-transparent hover:bg-transparent transition-none"
+            title="AI 채팅 열기"
+            aria-label="Open AI chat"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-        </button>
+            <svg
+              className="w-6 h-6 text-gray-700 dark:text-gray-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+          </button>
+        )
       )}
       
       {/* 메인 컨텐츠 영역 */}
@@ -321,7 +343,7 @@ function AppContent() {
         className="flex-1 flex flex-col overflow-hidden transition-all duration-300"
         style={{ 
           // When not compact layout we inset the menubar by 16px; account for that in main content margin
-          marginLeft: isMenubarVisible ? (isCompactLayout ? '80px' : '96px') : '0',
+          marginLeft: isLoginPage ? '0' : (isMenubarVisible ? (isCompactLayout ? '80px' : '96px') : '0'),
           marginRight: isRightSidebarOpen ? `${rightSidebarWidth}px` : '0',
           transition: 'margin 300ms ease-in-out'
         }}
@@ -331,7 +353,25 @@ function AppContent() {
           <div className={`h-full bg-white dark:bg-gray-900 overflow-hidden transition-shadow duration-300 ${isCompactLayout ? '' : 'rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/5 z-40'}`}>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard isDarkMode={isDarkMode} />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/dashboard" element={
+                loading ? (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+                    <div className="p-6 bg-white/90 dark:bg-gray-900/80 rounded-lg shadow-lg backdrop-blur-sm">
+                      <div className="w-64">
+                        <div className="h-1 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-green-400 to-blue-500 animate-stripes" style={{ width: '30%' }} />
+                        </div>
+                        <div className="mt-2 text-sm text-gray-700 dark:text-gray-300 text-center">로딩 중...</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : user ? (
+                  <Dashboard isDarkMode={isDarkMode} />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              } />
               <Route
                 path="/workspace"
                 element={
@@ -447,8 +487,9 @@ function AppContent() {
         </main>
       </div>
       
-      {/* 우측 사이드바 - 최상위 레벨 */}
-      <Taskbar
+      {/* 우측 사이드바 - 로그인 페이지에서는 숨김 */}
+      {!isLoginPage && (
+        <Taskbar
         isRightSidebarOpen={isRightSidebarOpen}
         rightSidebarWidth={rightSidebarWidth}
         isResizingRight={isResizingRight}
@@ -517,6 +558,7 @@ function AppContent() {
         }}
         onFocusDocument={(name: string | undefined | null) => focusDocumentByName(name)}
       />
+      )}
       <Toaster
         position="bottom-right"
         toastOptions={{

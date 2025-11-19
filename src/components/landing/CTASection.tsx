@@ -12,14 +12,6 @@ const CTASection = () => {
             <Download size={20} />
             다운로드
           </button>
-          <button className="px-8 py-3 border-2 border-border text-foreground rounded-md hover:bg-muted transition-colors text-base font-medium flex items-center gap-2">
-            <Apple size={20} />
-            Mac
-          </button>
-          <button className="px-8 py-3 border-2 border-border text-foreground rounded-md hover:bg-muted transition-colors text-base font-medium flex items-center gap-2">
-            <Github size={20} />
-            Windows
-          </button>
         </div>
         <p className="text-sm text-muted-foreground">
           무료로 사용하세요. 개발을 지원하려면 라이선스를 구입하세요.
