@@ -9,13 +9,13 @@ const ReadWriteSection = () => {
         <div className="flex flex-col md:flex-row gap-12 items-center">
           <div className="md:w-1/2 space-y-8">
             <h2 className="text-[48px] font-light text-foreground mb-8 leading-tight animate-fade-up" style={{ animationDelay: '100ms' }}>
-              읽기 및 쓰기 가능
+              AI 마크다운 에디터
             </h2>
 
             <div className="text-muted-foreground space-y-4 mb-8">
               <p className="text-xl leading-relaxed font-light">
-                Toolix는 독자와 작성자 모두에게 완벽한 경험을 제공합니다.
-                마크업 기호, 모드 변변기, 불필요한 모든 시각적 요소를 제거하여
+                Toolix는 사용자에게 완벽한 경험을 제공합니다.
+                마크업 기호, 클립보드, AI 어시스턴트 기능을 제공하며, 불필요한 모든 시각적 요소를 제거하여
                 콘텐츠 자체에 집중할 수 있도록 실시간 미리보기 기능을 제공합니다.
               </p>
             </div>
@@ -23,15 +23,15 @@ const ReadWriteSection = () => {
             <ul className="space-y-4 pt-4">
               <li className="flex items-center text-foreground">
                 <PencilSquare className="mr-3 h-5 w-5 text-muted-foreground" />
-                방해 요소 없음
+                Github Flavored Markdown 지원
               </li>
               <li className="flex items-center text-foreground">
                 <Eye className="mr-3 h-5 w-5 text-muted-foreground" />
-                원활한 라이브 미리보기
+                실시간 라이브 미리보기
               </li>
               <li className="flex items-center text-foreground">
                 <Check2 className="mr-3 h-5 w-5 text-muted-foreground" />
-                당신이 보는 것이 바로 당신이 의미하는 것입니다
+                AI 기반 콘텐츠 작성 지원
               </li>
             </ul>
           </div>
