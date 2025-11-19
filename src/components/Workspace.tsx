@@ -669,6 +669,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
         onDragOver={(e: React.DragEvent, id: string) => handleDragOver(e, id)}
         onDragEnd={() => handleDragEnd()}
         onHomeClick={handleHomeClick}
+        onOpenTaskbar={onOpenTaskbar}
       />
 
       {/* 탭 컨텐츠 */}

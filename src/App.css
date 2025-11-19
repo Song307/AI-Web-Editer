@@ -44,12 +44,20 @@
   box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.5);
 }
 
-/* Applied AI suggestion: yellow background for easy review */
-.ai-selection-applied {
-  background-color: #fff9c4; /* light yellow */
+/* AI Response Highlight */
+.ai-response-highlight {
+  background-color: #ffff00 !important;
+  padding: 2px 4px;
   border-radius: 3px;
-  padding: 2px 0;
-  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.15);
+  border: 1px solid #ffcc00;
+  display: inline;
+  box-shadow: 0 0 0 1px rgba(255, 204, 0, 0.3);
+}
+
+.ai-response-highlight,
+.ai-response-highlight * {
+  background-color: #ffff00 !important;
+  color: #000000 !important;
 }
 
 [data-theme="dark"] .ai-selection-applied {

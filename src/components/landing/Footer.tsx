@@ -48,7 +48,7 @@ const Footer = () => {
           </div>
         </div>
         <div className="pt-8 border-t border-background/20 text-center">
-          <p className="opacity-50 text-sm">© 2024 Typora. All rights reserved.</p>
+          <p className="opacity-50 text-sm">© 2025 Toolix. All rights reserved.</p>
         </div>
       </div>
     </footer>

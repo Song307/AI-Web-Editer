@@ -371,28 +371,6 @@ function AppContent() {
         />
       )}
       
-      {/* 우측 상단 고정 토글 버튼 - Dashboard와 Workspace에서만 표시 */}
-      {!isLoginPage && !isRightSidebarOpen && (
-        (location.pathname === '/dashboard' || location.pathname.startsWith('/workspace') || location.pathname.startsWith('/documents')) && (
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={openTaskbar}
-            className="fixed top-6 right-10 z-50 p-1 bg-transparent hover:bg-transparent transition-none"
-            title="AI 채팅 열기"
-            aria-label="Open AI chat"
-          >
-            <svg
-              className="w-6 h-6 text-gray-700 dark:text-gray-300"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-          </button>
-        )
-      )}
-      
       {/* 메인 컨텐츠 영역 */}
       <div 
         className="flex-1 flex flex-col overflow-hidden transition-all duration-300"
@@ -407,7 +385,7 @@ function AppContent() {
         <main className="flex-1 overflow-hidden">
           <div className={`h-full bg-white dark:bg-gray-900 overflow-hidden transition-shadow duration-300 ${isCompactLayout ? '' : 'rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/5 z-40'}`}>
             <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/" element={<Navigate to="/landing" replace />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/dashboard" element={
                 loading ? (

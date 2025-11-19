@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Modal from 'react-modal';
-import { Paperclip, X, Stars, Trash, Clipboard, ArrowsFullscreen, FileEarmarkPdf, Image as ImageIcon, Wrench, Chat, Code, Translate, FileText, Robot, ChevronDown, ThreeDots, Plus } from 'react-bootstrap-icons';
+import { Paperclip, X, Check, Stars, Trash, Clipboard, ArrowsFullscreen, FileEarmarkPdf, Image as ImageIcon, Wrench, Chat, Code, Translate, FileText, Robot, ChevronDown, ThreeDots, Plus } from 'react-bootstrap-icons';
 import ReactMarkdown from 'react-markdown';
 import toast from 'react-hot-toast';
 import { generateAIResponse } from '../../utils/ai';
@@ -959,10 +959,10 @@ const Taskbar: React.FC<TaskbarProps> = ({
         {/* 헤더 영역 */}
         <div className="flex items-center justify-between px-4 h-14 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           {/* 탭 메뉴 - 좌측 정렬 */}
-          <div className="flex h-full items-stretch">
+          <div className="flex h-full items-center">
             <button
               onClick={() => setActiveTab('aiAssistant')}
-              className={`px-4 text-sm font-medium transition-colors flex items-center ${
+              className={`h-full px-4 text-sm font-medium transition-colors flex items-center ${
                 activeTab === 'aiAssistant'
                   ? 'text-blue-600 border-b-2 border-blue-600 dark:text-blue-400 dark:border-blue-400'
                   : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
@@ -972,7 +972,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('clipboard')}
-              className={`px-4 text-sm font-medium transition-colors flex items-center ${
+              className={`h-full px-4 text-sm font-medium transition-colors flex items-center ${
                 activeTab === 'clipboard'
                   ? 'text-blue-600 border-b-2 border-blue-600 dark:text-blue-400 dark:border-blue-400'
                   : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
@@ -1425,19 +1425,19 @@ const Taskbar: React.FC<TaskbarProps> = ({
                                         <button
                                           onClick={() => {
                                             console.log('Taskbar: accept clicked (open confirm), suggestedText=', message.suggestedText);
-                                            // Prepare modal with old/new text. Use selectionPreview if available.
                                             const oldText = selectionPreview || '(선택 영역이 없습니다)';
                                             setReplaceOldText(oldText);
                                             setReplaceNewText(message.suggestedText || null);
                                             setReplaceDocumentName(message.documentName || null);
-                                            // Normalize timestamp to numeric value (ms since epoch)
                                             const tsVal = message.timestamp ? +new Date(message.timestamp as any) : null;
                                             setReplaceTargetTimestamp(tsVal);
                                             setShowReplaceModal(true);
                                           }}
-                                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
+                                          className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md transition-colors"
+                                          title="수락"
                                         >
-                                          수락
+                                          <Check size={14} />
+                                          <span>수락</span>
                                         </button>
                                         <button
                                           onClick={() => {
@@ -1446,9 +1446,11 @@ const Taskbar: React.FC<TaskbarProps> = ({
                                               onClearHighlight();
                                             }
                                           }}
-                                          className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-medium rounded-md transition-colors"
+                                          className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md transition-colors"
+                                          title="거절"
                                         >
-                                          거절
+                                          <X size={14} />
+                                          <span>거절</span>
                                         </button>
                                       </>
                                     )}

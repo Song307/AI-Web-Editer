@@ -3,7 +3,6 @@ import { Editor } from '@tiptap/react';
 import {
   Fonts,
   Plus,
-  Robot,
   ChevronDown,
   ThreeDots,
   TypeBold,
@@ -26,17 +25,12 @@ interface FloatingToolbarProps {
   editor: Editor;
   isVisible: boolean;
   isHiddenByWidth: boolean;
-  activeMenu: 'text' | 'insert' | 'ai';
+  activeMenu: 'text' | 'insert';
   toolbarOffset: number;
-  isAiLoading: boolean;
-  onMenuChange: (menu: 'text' | 'insert' | 'ai') => void;
+  onMenuChange: (menu: 'text' | 'insert') => void;
   onToggleVisibility: (visible: boolean) => void;
   onLinkInsert: () => void;
   onImageInsert: () => void;
-  onAIResearch: () => void;
-  onAIAnalyze: () => void;
-  onAIPersonaFeedback: () => void;
-  onAIAnswer: () => void;
   // Taskbar position props
   isRightSidebarOpen?: boolean;
   rightSidebarWidth?: number;
@@ -48,15 +42,10 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
   isHiddenByWidth,
   activeMenu,
   toolbarOffset,
-  isAiLoading,
   onMenuChange,
   onToggleVisibility,
   onLinkInsert,
   onImageInsert,
-  onAIResearch,
-  onAIAnalyze,
-  onAIPersonaFeedback,
-  onAIAnswer,
   isRightSidebarOpen = false,
   rightSidebarWidth = 320,
 }) => {
@@ -104,19 +93,6 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
                 <Plus size={20} />
               </button>
               <span className="tooltip-text">삽입</span>
-            </div>
-            <div className="tooltip-container">
-              <button
-                onClick={() => onMenuChange('ai')}
-                className={`p-2 rounded-lg cursor-pointer text-sm font-medium transition-all ${
-                  activeMenu === 'ai' 
-                    ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white' 
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <Robot size={20} />
-              </button>
-              <span className="tooltip-text">AI</span>
             </div>
           </div>
           
@@ -330,48 +306,6 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
                   </button>
                   <span className="tooltip-text">동영상</span>
                 </div>
-              </>
-            )}
-            
-            {/* AI 메뉴 */}
-            {activeMenu === 'ai' && (
-              <>
-                <button 
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={onAIResearch} 
-                  className={`px-3 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all hover:from-purple-600 hover:to-purple-700 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${isAiLoading ? 'animate-pulse' : ''}`} 
-                  disabled={isAiLoading}
-                  title="AI 연구"
-                >
-                  연구
-                </button>
-                <button 
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={onAIAnalyze} 
-                  className={`px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all hover:from-blue-600 hover:to-blue-700 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${isAiLoading ? 'animate-pulse' : ''}`} 
-                  disabled={isAiLoading}
-                  title="AI 분석"
-                >
-                  분석
-                </button>
-                <button 
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={onAIPersonaFeedback} 
-                  className={`px-3 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all hover:from-green-600 hover:to-green-700 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${isAiLoading ? 'animate-pulse' : ''}`} 
-                  disabled={isAiLoading}
-                  title="AI 피드백"
-                >
-                  피드백
-                </button>
-                <button 
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={onAIAnswer} 
-                  className={`px-3 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all hover:from-orange-600 hover:to-orange-700 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${isAiLoading ? 'animate-pulse' : ''}`} 
-                  disabled={isAiLoading}
-                  title="AI 답변"
-                >
-                  답변
-                </button>
               </>
             )}
           </div>

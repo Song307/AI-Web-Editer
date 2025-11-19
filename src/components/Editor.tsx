@@ -35,7 +35,7 @@ import LeftSidebar from './Editor/LeftSidebar';
 import FloatingToolbar from './Editor/FloatingToolbar';
 import DocumentListSidebar, { DocumentListSidebarRef } from './Editor/DocumentListSidebar';
 import { DocumentTab } from './Editor/types';
-import { Robot, X } from 'react-bootstrap-icons';
+import { Robot, X, Check } from 'react-bootstrap-icons';
 
 // Extension that highlights AI selections via a ProseMirror decoration
 // Helper: escape HTML for safe insertion when wrapping plain text in a span
@@ -330,11 +330,6 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [summaryResult, setSummaryResult] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
-  // Rewrite / Tone modal state
-  const [showRewriteModal, setShowRewriteModal] = useState(false);
-  const [rewriteResult, setRewriteResult] = useState('');
-  const [rewriteLoading, setRewriteLoading] = useState(false);
-  const [rewriteTone, setRewriteTone] = useState<string | undefined>(undefined);
   // Pending AI-applied change awaiting user accept/reject
   const [pendingAiChange, setPendingAiChange] = useState<null | { from: number; to: number; original: string; replacement: string }>(null);
   const [pendingAiPos, setPendingAiPos] = useState<{ x: number; y: number } | null>(null);
@@ -398,79 +393,6 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
     }
   };
 
-  // 리라이팅/톤 변환 처리기
-  const handleRewrite = async (tone: string = 'business') => {
-    if (!editor) return;
-    let text = '';
-    try {
-      const sel = editor.state.selection;
-      if (sel && sel.from !== sel.to) {
-        text = editor.state.doc.textBetween(sel.from, sel.to).trim();
-      } else {
-        text = editor.state.doc.textBetween(0, editor.state.doc.content.size).trim();
-      }
-    } catch (e) {
-      console.error('handleRewrite: failed to read editor text', e);
-      toast.error('리라이트할 텍스트를 가져오지 못했습니다.');
-      return;
-    }
-
-    if (!text || text.length === 0) {
-      toast.error('리라이트할 텍스트가 없습니다. 문서를 입력하거나 텍스트를 선택하세요.');
-      return;
-    }
-
-    setRewriteLoading(true);
-    setRewriteTone(tone);
-    try {
-      // Better tone-specific prompt templates with short examples to guide rewrite
-      const tonePrompts: Record<string, string> = {
-        business: `You are a professional editor. Rewrite the following text in a professional, formal business tone. Preserve all factual content and intent, improve clarity and flow, and use polite formal language. Keep length similar unless "concise" tone requested. Example:\nOriginal: "We need to finish this ASAP, it's urgent."\nRewritten: "We should complete this task as soon as possible; it is urgent."\n\nOutput only the rewritten text. Text:\n${text}`,
-        friendly: `You are a friendly editor. Rewrite the following text to sound warm, approachable, and conversational, while preserving meaning. Use natural, simple phrasing and add friendly connectors where appropriate. Example:\nOriginal: "Please review the report by Friday."\nRewritten: "Could you take a look at the report by Friday? Thanks!"\n\nOutput only the rewritten text. Text:\n${text}`,
-        concise: `You are an editor that makes writing concise and direct. Rewrite the following text to be shorter and clearer while preserving meaning. Remove filler words and redundant phrases. Example:\nOriginal: "Due to the fact that we have limited time, we should consider accelerating the schedule."\nRewritten: "We should accelerate the schedule because time is limited."\n\nOutput only the rewritten text. Text:\n${text}`,
-        expand: `You are a clarity-focused editor. Expand the following text to add necessary context and explanations so it reads as a complete, informative paragraph. Keep tone neutral and helpful. Example:\nOriginal: "The results improved."\nRewritten: "The results improved by 12% compared to last quarter, primarily due to increased customer engagement and targeted marketing."\n\nOutput only the rewritten text. Text:\n${text}`,
-        casual: `You are an informal, casual editor. Rewrite the following text in relaxed, everyday language as if speaking to a friend. Preserve meaning but use simple, colloquial phrases. Example:\nOriginal: "Please be advised that the meeting is postponed."\nRewritten: "Hey — the meeting's been pushed back."\n\nOutput only the rewritten text. Text:\n${text}`,
-        academic: `You are an academic editor. Rewrite the following text in a formal academic tone, using precise language and suitable academic phrasing. Preserve meaning and avoid conversational expressions. Example:\nOriginal: "This shows that our method works better."\nRewritten: "These findings indicate that the proposed method outperforms baseline approaches."\n\nOutput only the rewritten text. Text:\n${text}`,
-      };
-
-      const prompt = tonePrompts[tone] || `Rewrite the following text in a ${tone} tone, preserving meaning but improving clarity and flow. Output only the rewritten text:\n\n${text}`;
-      const aiText = await generateAIResponse(prompt);
-      setRewriteResult(aiText || '');
-      setShowRewriteModal(true);
-    } catch (err) {
-      console.error('handleRewrite AI call failed', err);
-      toast.error('리라이트 생성에 실패했습니다.');
-    } finally {
-      setRewriteLoading(false);
-    }
-  };
-
-  const applyRewrite = () => {
-    if (!editor || !rewriteResult) return;
-    try {
-      const sel = editor.state.selection;
-      if (sel && sel.from !== sel.to) {
-        const { from, to } = sel;
-        editor.chain().focus().setTextSelection({ from, to }).insertContent(rewriteResult).run();
-      } else {
-        try {
-          if (editor.commands && (editor.commands as any).setContent) {
-            (editor.commands as any).setContent(rewriteResult);
-          } else {
-            editor.chain().focus().insertContent(rewriteResult).run();
-          }
-        } catch (e) {
-          console.error('applyRewrite fallback insert failed', e);
-          editor.chain().focus().insertContent(rewriteResult).run();
-        }
-      }
-      toast.success('리라이트가 적용되었습니다.');
-    } catch (e) {
-      console.error('applyRewrite failed', e);
-      toast.error('리라이트 적용에 실패했습니다.');
-    }
-  };
-
   const applySummary = () => {
     if (!editor || !summaryResult) return;
     try {
@@ -498,7 +420,7 @@ const Editor = forwardRef<{ handleSave: () => void; saveEditorStateToCookie: () 
       toast.error('요약 적용에 실패했습니다.');
     }
   };
-  const [activeToolbarMenu, setActiveToolbarMenu] = useState<'text' | 'insert' | 'ai'>('text');
+  const [activeToolbarMenu, setActiveToolbarMenu] = useState<'text' | 'insert'>('text');
   const [isToolbarVisible, setIsToolbarVisible] = useState(() => {
     // 로컬 스토리지에서 툴바 표시 상태 불러오기, 기본값은 true
     const saved = localStorage.getItem('isToolbarVisible');
@@ -2392,13 +2314,26 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
         if (currentTab) {
           const markdownContent = editor ? htmlToMarkdown(editor.getHTML()) : '';
           const now = new Date();
+          const docId = documentId || activeTabId;
+          
+          // 기존 문서 정보를 가져와서 createdAt 유지
+          let createdAt = now;
+          try {
+            const existingDoc = await getDocument(docId);
+            if (existingDoc) {
+              createdAt = existingDoc.createdAt;
+            }
+          } catch (error) {
+            console.warn('기존 문서 정보를 가져오는데 실패했습니다:', error);
+          }
+          
           await saveDocument({
-            id: documentId || activeTabId,
+            id: docId,
             title: newTitle,
             content: markdownContent,
             contentType: 'markdown',
             updatedAt: now,
-            createdAt: now, // 기존 문서가 있다면 createdAt은 유지되어야 하지만, 간단화를 위해 현재 시간으로 설정
+            createdAt: createdAt,
           });
           toast.success('파일 제목이 변경되어 저장되었습니다.');
         }
@@ -2454,18 +2389,39 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       toast.error('마지막 탭은 삭제할 수 없습니다.');
       return;
     }
+
     const currentIndex = (currentTabs || []).findIndex((tab: any) => tab.id === currentActiveTabId);
-    const newTabs = (currentTabs || []).filter((tab: any) => tab.id !== currentActiveTabId);
-    
-    // 삭제 후 활성화할 탭 결정 (이전 탭 또는 다음 탭)
-    let newActiveTabId = '';
-    if (currentIndex > 0) {
-      newActiveTabId = (currentTabs || [])[currentIndex - 1].id;
-      newActiveTabId = (currentTabs || [])[1].id;
-    }
-    updateTabs(newTabs);
-    updateActiveTabId(newActiveTabId);
-    toast.success('파일이 삭제되었습니다.');
+    const tabToDelete = (currentTabs || []).find((tab: any) => tab.id === currentActiveTabId);
+
+    // If this tab is backed by a saved document in DB, delete it there as well
+    (async () => {
+      try {
+        if (tabToDelete && tabToDelete.documentId) {
+          await deleteDocument(tabToDelete.documentId);
+          console.log('Editor: deleteDocument succeeded for', tabToDelete.documentId);
+        }
+      } catch (err) {
+        console.error('Editor: deleteDocument failed', err);
+        toast.error('서버에서 파일 삭제에 실패했습니다.');
+        // still proceed with local UI removal to avoid leaving a stuck tab
+      } finally {
+        const newTabs = (currentTabs || []).filter((tab: any) => tab.id !== currentActiveTabId);
+
+        // 삭제 후 활성화할 탭 결정 (이전 탭 또는 다음 탭)
+        let newActiveTabId = '';
+        if (newTabs.length > 0) {
+          if (currentIndex > 0) {
+            newActiveTabId = newTabs[Math.max(0, currentIndex - 1)].id;
+          } else {
+            newActiveTabId = newTabs[0].id;
+          }
+        }
+
+        updateTabs(newTabs);
+        updateActiveTabId(newActiveTabId);
+        toast.success('파일이 삭제되었습니다. (로컬 및 서버 동기화 완료)');
+      }
+    })();
   };
 
   const handleSave = async () => {
@@ -2495,12 +2451,26 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
       
       // Prepare document data
       const now = new Date();
+      let createdAt = now;
+      
+      // If updating existing document, preserve createdAt
+      if (currentTab.documentId) {
+        try {
+          const existingDoc = await getDocument(currentTab.documentId);
+          if (existingDoc) {
+            createdAt = existingDoc.createdAt;
+          }
+        } catch (error) {
+          console.warn('기존 문서 정보를 가져오는데 실패했습니다:', error);
+        }
+      }
+      
       const doc: Document = {
         id: docId,
         title: title || 'Untitled Document',
         content: contentToSave,
         contentType: currentTab.contentType || 'html',
-        createdAt: now,
+        createdAt: createdAt,
         updatedAt: now,
       };
 
@@ -3243,7 +3213,6 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
         isDocumentListOpen={isDocumentListOpen}
         onDocumentListToggle={() => setIsDocumentListOpen(!isDocumentListOpen)}
         onSummarize={(length) => handleSummarize(length)}
-        onRewrite={(tone) => handleRewrite(tone)}
       />
       {/* Pending AI change accept/reject inline near applied block (falls back to top-right) */}
       {/* NOTE: this block is rendered later inside the editor container to position absolutely relative to it. */}
@@ -3267,25 +3236,6 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
           </Modal>
         )}
 
-          {/* Rewrite modal */}
-          {showRewriteModal && (
-            <Modal
-              isOpen={showRewriteModal}
-              onRequestClose={() => setShowRewriteModal(false)}
-              ariaHideApp={false}
-              className="max-w-2xl w-full mx-4 mt-20 bg-white dark:bg-gray-800 p-6 rounded shadow-lg"
-              overlayClassName="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-center"
-            >
-              <h3 className="text-lg font-semibold mb-3">리라이트 결과 ({rewriteTone})</h3>
-              <div className="prose max-h-64 overflow-auto mb-4 text-gray-800 dark:text-gray-200">
-                {rewriteLoading ? '생성 중...' : rewriteResult}
-              </div>
-              <div className="flex justify-end gap-2">
-                <button className="px-3 py-2 bg-gray-200 rounded" onClick={() => setShowRewriteModal(false)}>닫기</button>
-                <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={() => { applyRewrite(); setShowRewriteModal(false); }}>적용</button>
-              </div>
-            </Modal>
-          )}
       
       {/* 메인 컨텐츠 영역 - 좌측 사이드바와 에디터 */}
       <div className="flex-1 flex relative min-h-0">
@@ -3464,23 +3414,39 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
               >
                 <button
                   onClick={acceptPendingAiChange}
-                  className="px-2 py-1 bg-green-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-green-700"
-                >수락</button>
+                  title="수락"
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md"
+                >
+                  <Check size={14} />
+                  <span className="sr-only">수락</span>
+                </button>
                 <button
                   onClick={rejectPendingAiChange}
-                  className="px-2 py-1 bg-red-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-red-700"
-                >거절</button>
+                  title="거절"
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md"
+                >
+                  <X size={14} />
+                  <span className="sr-only">거절</span>
+                </button>
               </div>
             ) : (
               <div className="absolute right-6 top-6 z-50 flex items-center gap-2">
                 <button
                   onClick={acceptPendingAiChange}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-green-700"
-                >수락</button>
+                  title="수락"
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md"
+                >
+                  <Check size={14} />
+                  <span className="sr-only">수락</span>
+                </button>
                 <button
                   onClick={rejectPendingAiChange}
-                  className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold shadow hover:bg-red-700"
-                >거절</button>
+                  title="거절"
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md"
+                >
+                  <X size={14} />
+                  <span className="sr-only">거절</span>
+                </button>
               </div>
             )}
           </>
@@ -3826,7 +3792,6 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
         isHiddenByWidth={isToolbarHiddenByWidth}
         activeMenu={activeToolbarMenu}
         toolbarOffset={toolbarOffset}
-        isAiLoading={isAiLoading}
         onMenuChange={setActiveToolbarMenu}
         onToggleVisibility={setIsToolbarVisible}
         onLinkInsert={handleLinkInsert}
@@ -3834,10 +3799,6 @@ const TableInsertModal = ({ isOpen, onClose, onInsert }: { isOpen: boolean; onCl
           setImageUrl('');
           setShowImageUrlModal(true);
         }}
-        onAIResearch={handleAIResearch}
-        onAIAnalyze={handleAIAnalyze}
-        onAIPersonaFeedback={handleAIPersonaFeedback}
-        onAIAnswer={handleAIAnswer}
         isRightSidebarOpen={isRightSidebarOpen}
         rightSidebarWidth={rightSidebarWidth}
       />

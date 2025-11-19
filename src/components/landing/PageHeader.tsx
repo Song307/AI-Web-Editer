@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { auth } from '../../firebase';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 
 // Animation hook
 const useSlideAnimation = (isVisible: boolean) => {
@@ -36,6 +38,8 @@ export const PageHeader = () => {
   const [scrolled, setScrolled] = useState(false);
   const [shouldShowHeader, setShouldShowHeader] = useState(false);
   const { shouldRender, animationClass } = useSlideAnimation(shouldShowHeader);
+  const [user, setUser] = useState<User | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -52,6 +56,23 @@ export const PageHeader = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      navigate('/landing');
+    } catch (err) {
+      console.error('로그아웃 실패', err);
+    }
+  };
 
   // Add animation styles to the document head
   useEffect(() => {
@@ -130,9 +151,18 @@ export const PageHeader = () => {
           </nav>
           
           <div className="flex items-center space-x-4">
-            <button className="px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors">
-              로그인
-            </button>
+            {user ? (
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
+              >
+                로그아웃
+              </button>
+            ) : (
+              <Link to="/login" className="px-4 py-2 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors">
+                로그인
+              </Link>
+            )}
             <button className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
               시작하기
             </button>
