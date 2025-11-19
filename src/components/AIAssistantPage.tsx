@@ -48,6 +48,15 @@ const AIAssistantPage: React.FC = () => {
     }
   }, [currentSession]);
 
+  // 새 메시지가 추가되면 메시지 영역을 자동으로 맨 아래로 스크롤
+  useEffect(() => {
+    try {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } catch (e) {
+      // 무시
+    }
+  }, [currentSession.length]);
+
   // 페이지가 로드될 때 입력창에 포커스
   useEffect(() => {
     inputRef.current?.focus();
@@ -447,7 +456,7 @@ const AIAssistantPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
       {/* 좌측 사이드바 - 세션 목록 */}
       <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -492,10 +501,10 @@ const AIAssistantPage: React.FC = () => {
       </div>
 
       {/* 메인 채팅 영역 */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         <div 
           ref={dropZoneRef}
-          className="flex flex-col h-full relative"
+          className="flex-1 flex flex-col relative min-h-0"
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -537,7 +546,8 @@ const AIAssistantPage: React.FC = () => {
       </div>
 
       {/* 메시지 영역 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4" aria-live="polite">
         {currentSession.length === 0 && (
           <div className="text-center py-12">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
@@ -676,43 +686,46 @@ const AIAssistantPage: React.FC = () => {
           </div>
         )}
 
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
-      {/* 첨부 파일 미리보기 */}
-      {uploadedFiles.length > 0 && (
-        <div className="px-3 pb-2 space-y-2">
-          {uploadedFiles.map((file, index) => (
-            <div key={index} className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded-lg">
-              {file.type === 'image' ? (
-                <>
-                  <ImageIcon size={16} className="text-blue-500 flex-shrink-0" />
-                  <img src={file.data} alt={file.name} className="w-12 h-12 object-cover rounded" />
-                </>
-              ) : (
-                <FileEarmarkPdf size={16} className="text-red-500 flex-shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {(file.size / 1024).toFixed(1)} KB
-                  {file.pageCount && ` • ${file.pageCount} 페이지`}
-                </p>
-              </div>
-              <button
-                onClick={() => removeFile(index)}
-                className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
-                title="파일 제거"
-              >
-                <Trash size={14} className="text-red-500" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* 첨부 파일 미리보기 (입력영역으로 이동됨) */}
 
       {/* 입력 영역 */}
-      <div className="border-t border-gray-200 dark:border-gray-700 p-4">
+      <div className="sticky bottom-0 z-10 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 p-4">
+        {/* 첨부 파일 미리보기 (여기에 위치) */}
+        {uploadedFiles.length > 0 && (
+          <div className="px-3 pb-2 space-y-2">
+            {uploadedFiles.map((file, index) => (
+              <div key={index} className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded-lg">
+                {file.type === 'image' ? (
+                  <>
+                    <ImageIcon size={16} className="text-blue-500 flex-shrink-0" />
+                    <img src={file.data} alt={file.name} className="w-12 h-12 object-cover rounded" />
+                  </>
+                ) : (
+                  <FileEarmarkPdf size={16} className="text-red-500 flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{file.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {(file.size / 1024).toFixed(1)} KB
+                    {file.pageCount && ` • ${file.pageCount} 페이지`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => removeFile(index)}
+                  className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+                  title="파일 제거"
+                >
+                  <Trash size={14} className="text-red-500" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-2">
           {/* 도구 메뉴 */}
           <div className="relative" ref={toolsMenuRef}>

@@ -55,13 +55,13 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <>
               {/* 검색 입력 */}
               <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                <input
+                  <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => onSearchChange(e.target.value)}
                   placeholder="텍스트 검색..."
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  autoFocus
+                  
                 />
                 
                 {/* 검색 결과 카운트 */}

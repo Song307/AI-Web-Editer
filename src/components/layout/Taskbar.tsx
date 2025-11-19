@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import Modal from 'react-modal';
 import { Paperclip, X, Stars, Trash, Clipboard, ArrowsFullscreen, FileEarmarkPdf, Image as ImageIcon, Wrench, Chat, Code, Translate, FileText, Robot, ChevronDown, ThreeDots, Plus } from 'react-bootstrap-icons';
 import ReactMarkdown from 'react-markdown';
 import toast from 'react-hot-toast';
@@ -49,6 +50,7 @@ interface TaskbarProps {
   onClearHighlight?: () => void,
   documentTitle?: string,
   onUndo?: () => void
+  onFocusDocument?: (name?: string | null) => void,
 }
 
 const Taskbar: React.FC<TaskbarProps> = ({
@@ -64,7 +66,8 @@ const Taskbar: React.FC<TaskbarProps> = ({
   onHighlightSelection,
   onClearHighlight,
   documentTitle = 'Untitled Document',
-  onUndo
+  onUndo,
+  onFocusDocument
 }) => {
   const [activeTab, setActiveTab] = useState<'clipboard' | 'aiAssistant'>('aiAssistant');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -80,6 +83,12 @@ const Taskbar: React.FC<TaskbarProps> = ({
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  // Replace-confirm modal state
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
+  const [replaceOldText, setReplaceOldText] = useState<string | null>(null);
+  const [replaceNewText, setReplaceNewText] = useState<string | null>(null);
+  const [replaceTargetTimestamp, setReplaceTargetTimestamp] = useState<number | null>(null);
+  const [replaceDocumentName, setReplaceDocumentName] = useState<string | null>(null);
   const [isClipboardSelected, setIsClipboardSelected] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(() => {
     const saved = localStorage.getItem('selectedTool');
@@ -982,7 +991,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
         </div>
 
         {/* 탭 내용 */}
-        <div className="flex-1 overflow-visible">
+        <div className="flex-1 min-h-0">
           {activeTab === 'clipboard' && (
             <div 
               ref={clipboardTabRef}
@@ -1092,7 +1101,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
                                 className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 rows={4}
                                 placeholder="텍스트를 입력하세요..."
-                                autoFocus
+                                
                               />
                             ) : (
                               <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap">
@@ -1130,7 +1139,7 @@ const Taskbar: React.FC<TaskbarProps> = ({
           )}
           
           {activeTab === 'aiAssistant' && (
-            <div className="flex flex-col h-full bg-white dark:bg-gray-900 max-h-full overflow-y-auto">
+            <div className="flex flex-col h-full bg-white dark:bg-gray-900 min-h-0">
               {/* 세션 선택 헤더 */}
               <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                 <div className="relative">
@@ -1403,21 +1412,16 @@ const Taskbar: React.FC<TaskbarProps> = ({
                                       <>
                                         <button
                                           onClick={() => {
-                                            if (onReplaceSelection && message.suggestedText) {
-                                              onReplaceSelection(message.suggestedText);
-                                              toast.success('텍스트가 변경되었습니다.');
-                                            }
-                                            if (onClearHighlight) {
-                                              onClearHighlight();
-                                            }
-                                            // 메시지 상태 업데이트
-                                            setMessages(prevMessages => 
-                                              prevMessages.map(msg => 
-                                                msg.timestamp === message.timestamp 
-                                                  ? { ...msg, applied: true }
-                                                  : msg
-                                              )
-                                            );
+                                            console.log('Taskbar: accept clicked (open confirm), suggestedText=', message.suggestedText);
+                                            // Prepare modal with old/new text. Use selectionPreview if available.
+                                            const oldText = selectionPreview || '(선택 영역이 없습니다)';
+                                            setReplaceOldText(oldText);
+                                            setReplaceNewText(message.suggestedText || null);
+                                            setReplaceDocumentName(message.documentName || null);
+                                            // Normalize timestamp to numeric value (ms since epoch)
+                                            const tsVal = message.timestamp ? +new Date(message.timestamp as any) : null;
+                                            setReplaceTargetTimestamp(tsVal);
+                                            setShowReplaceModal(true);
                                           }}
                                           className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
                                         >
@@ -1460,6 +1464,64 @@ const Taskbar: React.FC<TaskbarProps> = ({
                       </div>
                     </div>
                   </div>
+                )}
+
+                {/* Replace Confirmation Modal */}
+                {showReplaceModal && (
+                  <Modal
+                    isOpen={showReplaceModal}
+                    onRequestClose={() => setShowReplaceModal(false)}
+                    ariaHideApp={false}
+                    className="max-w-2xl w-full mx-4 mt-20 bg-white dark:bg-gray-800 p-6 rounded shadow-lg"
+                    overlayClassName="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-center"
+                  >
+                    <h3 className="text-lg font-semibold mb-3">제안 적용 확인</h3>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">이전 내용</h4>
+                        <pre className="max-h-40 overflow-auto p-2 bg-gray-50 dark:bg-gray-900 text-sm rounded">{replaceOldText}</pre>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">변경 후</h4>
+                        <pre className="max-h-40 overflow-auto p-2 bg-gray-50 dark:bg-gray-900 text-sm rounded">{replaceNewText}</pre>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button className="px-3 py-2 bg-gray-200 rounded" onClick={() => setShowReplaceModal(false)}>취소</button>
+                      <button
+                        className="px-3 py-2 bg-blue-600 text-white rounded"
+                      onClick={() => {
+                          // Confirm apply: focus document tab first if available
+                          if (onFocusDocument && replaceDocumentName) {
+                            try {
+                              onFocusDocument(replaceDocumentName);
+                            } catch (e) {
+                              console.warn('Taskbar: onFocusDocument failed', e);
+                            }
+                          }
+                          // Then request replacement (App will queue if editor not ready)
+                          if (onReplaceSelection && replaceNewText) {
+                            console.log('Taskbar: confirm apply replaceNewText=', replaceNewText);
+                            onReplaceSelection(replaceNewText);
+                            toast.success('제안사항이 적용 요청되었습니다.');
+                          } else {
+                            toast.error('적용할 수 없습니다. 편집기 연결이 없습니다.');
+                          }
+                          if (onClearHighlight) onClearHighlight();
+                          // mark message applied
+                          setMessages(prevMessages =>
+                            prevMessages.map(msg => {
+                              const msgTs = msg.timestamp ? +new Date(msg.timestamp as any) : null;
+                              return msgTs === replaceTargetTimestamp ? { ...msg, applied: true } : msg;
+                            })
+                          );
+                          setShowReplaceModal(false);
+                        }}
+                      >
+                        적용
+                      </button>
+                    </div>
+                  </Modal>
                 )}
 
                 <div ref={messagesEndRef} />

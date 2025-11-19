@@ -5,25 +5,81 @@ import { VoiceParams } from '../types/secretary';
 const API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 
 if (!API_KEY) {
-  console.error('REACT_APP_GEMINI_API_KEY is not set');
-  throw new Error('Gemini API key is missing');
+  console.warn('REACT_APP_GEMINI_API_KEY is not set. AI calls will fail until a valid key is provided.');
 }
+
+// Default model to try. Use the project's available Gemini model.
+// If you see a 404 for a model, list available models by calling the REST endpoint:
+// GET https://generativelanguage.googleapis.com/v1beta/models
+// Recommended model (set per your note):
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 
 // Debug log removed: API key load status
 
-const genAI = new GoogleGenerativeAI(API_KEY);
+const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null as any;
 
 export const generateAIResponse = async (prompt: string): Promise<string> => {
+  if (!genAI) {
+    console.error('generateAIResponse: Missing Gemini API key');
+    throw new Error('Gemini API key is missing');
+  }
+
   try {
     console.log('AI 요청 시작:', prompt.substring(0, 50) + '...');
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite-preview-06-17' });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-    console.log('AI 응답 성공');
-    return text;
+
+    // Try the configured model name, and if that returns a model-not-found
+    // error, try the resource-style name ("models/<name>"). This handles
+    // differences between returned model names from the ListModels endpoint.
+    const triedVariants = [] as string[];
+    const tryModel = async (modelName: string) => {
+      triedVariants.push(modelName);
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    };
+
+    // First, try the plain DEFAULT_MODEL
+    try {
+      const text = await tryModel(DEFAULT_MODEL);
+      console.log('AI 응답 성공 (model=', DEFAULT_MODEL, ')');
+      return text;
+    } catch (firstErr) {
+      console.warn('First model attempt failed for', DEFAULT_MODEL, firstErr);
+      // If the model looks like it's not found, try the prefixed form
+      const prefixed = DEFAULT_MODEL.startsWith('models/') ? DEFAULT_MODEL : `models/${DEFAULT_MODEL}`;
+      if (!triedVariants.includes(prefixed)) {
+        try {
+          const text = await tryModel(prefixed);
+          console.log('AI 응답 성공 (model=', prefixed, ')');
+          return text;
+        } catch (secondErr) {
+          console.warn('Second model attempt failed for', prefixed, secondErr);
+          // fallthrough to error handling below
+        }
+      }
+      // If both attempts failed, surface the original error for logging below
+      throw firstErr;
+    }
   } catch (error) {
     console.error('AI API error:', error);
+
+    // If it's a model-not-found / 404 from the Generative API, try to
+    // fetch the available models list to aid debugging.
+    try {
+      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`;
+      const resp = await fetch(listUrl);
+      if (resp.ok) {
+        const models = await resp.json();
+        console.warn('Available Generative Models:', models);
+      } else {
+        const txt = await resp.text();
+        console.warn('Failed to list models, response:', resp.status, txt);
+      }
+    } catch (listErr) {
+      console.warn('Error while fetching model list:', listErr);
+    }
+
     throw new Error('Failed to generate AI response');
   }
 };

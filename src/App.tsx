@@ -13,6 +13,7 @@ import Taskbar from './components/layout/Taskbar';
 import Menubar from './components/layout/Menubar';
 import { initDB } from './utils/db';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import LandingPage from './components/LandingPage';
 import './App.css';
 
@@ -74,11 +75,49 @@ function AppContent() {
     replaceSelection?: (text: string) => void;
     highlightSelection?: (from: number, to: number) => void;
     clearHighlight?: () => void;
+    collapseSelection?: () => void;
+    focus?: (opts?: any) => void;
   } | null>(null);
+
+  // Tab API ref for focusing/opening tabs from Taskbar
+  const tabApiRef = React.useRef<{ setActiveTabByTitle?: (title: string) => void; setActiveTabId?: (id: string | null) => void } | null>(null);
+
+  const onRegisterTabApi = React.useCallback((api: typeof tabApiRef.current) => {
+    console.log('App: onRegisterTabApi called', api);
+    tabApiRef.current = api;
+  }, []);
+
+  const focusDocumentByName = React.useCallback((name: string | undefined | null) => {
+    if (!name) return;
+    try {
+      if (tabApiRef.current?.setActiveTabByTitle) {
+        tabApiRef.current.setActiveTabByTitle(name);
+      } else if (tabApiRef.current?.setActiveTabId) {
+        // no-op: cannot find by id from name
+      }
+    } catch (e) {
+      console.error('App: focusDocumentByName failed', e);
+    }
+  }, []);
+
+  // If Taskbar requests a replacement while the editor API isn't ready,
+  // store it here and apply when the API becomes available.
+  const pendingReplacementRef = React.useRef<string | null>(null);
 
   const onRegisterApi = React.useCallback((api: typeof workspaceApiRef.current) => {
     console.log('App: onRegisterApi called', api);
     workspaceApiRef.current = api;
+    // If there is a pending replacement request, apply it now.
+    if (pendingReplacementRef.current && workspaceApiRef.current?.replaceSelection) {
+      try {
+        workspaceApiRef.current.replaceSelection(pendingReplacementRef.current);
+        toast.success('대기 중이던 제안사항이 문서에 적용되었습니다.');
+      } catch (e) {
+        console.error('App: failed to apply pending replacement', e);
+        toast.error('대기 중이던 제안사항 적용에 실패했습니다.');
+      }
+      pendingReplacementRef.current = null;
+    }
   }, []);
 
   const onSelectionPreviewChange = React.useCallback((preview: string | null) => {
@@ -195,6 +234,16 @@ function AppContent() {
 
   const openTaskbar = () => {
     setIsRightSidebarOpen(true);
+    // After opening the taskbar, restore focus back to the editor so the
+    // browser doesn't clear the user's selection. Use a short timeout so the
+    // sidebar render completes first.
+    setTimeout(() => {
+      try {
+        workspaceApiRef.current?.focus?.();
+      } catch (e) {
+        console.warn('App: failed to restore editor focus after opening taskbar', e);
+      }
+    }, 0);
   };
 
   // 우측 사이드바 리사이저 핸들러
@@ -250,7 +299,8 @@ function AppContent() {
       {/* 우측 상단 고정 토글 버튼 */}
       {!isRightSidebarOpen && (
         <button
-          onClick={() => setIsRightSidebarOpen(true)}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={openTaskbar}
           className="fixed top-6 right-10 z-50 p-1 bg-transparent hover:bg-transparent transition-none"
           title="AI 채팅 열기"
           aria-label="Open AI chat"
@@ -291,8 +341,9 @@ function AppContent() {
                     isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -307,8 +358,9 @@ function AppContent() {
                     isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -323,8 +375,9 @@ function AppContent() {
                     isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -339,8 +392,9 @@ function AppContent() {
                     isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -355,8 +409,9 @@ function AppContent() {
                     isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -404,11 +459,19 @@ function AppContent() {
         selectionPreview={selectionPreview}
         selectionRange={selectionRange}
         onClearSelection={() => {
-          // Clear App-level selection state and also clear editor highlight if present
+          // Non-destructive clear: collapse editor selection and clear UI highlight
           console.log('App: onClearSelection called, workspaceApiRef =', workspaceApiRef.current);
-          console.log('App: Before clearSelection, selectionPreview =', selectionPreview);
+          try {
+            // Ask editor to collapse its selection (no deletion) if available
+            if (workspaceApiRef.current?.collapseSelection) {
+              workspaceApiRef.current.collapseSelection();
+              console.log('App: collapseSelection called on editor');
+            }
+          } catch (e) {
+            console.warn('App: collapseSelection call failed', e);
+          }
+          // Clear App-level preview state and editor highlight
           clearSelection();
-          console.log('App: After clearSelection, selectionPreview =', selectionPreview);
           try {
             workspaceApiRef.current?.clearHighlight?.();
             console.log('App: clearHighlight called successfully');
@@ -418,11 +481,20 @@ function AppContent() {
         }}
         onReplaceSelection={(newText: string) => {
           console.log('App: onReplaceSelection called, workspaceApiRef =', workspaceApiRef.current, 'newText=', newText);
-          // Ask the workspace/editor to replace the selected text
-          try {
-            workspaceApiRef.current?.replaceSelection?.(newText);
-          } catch (e) {
-            console.error('App: replaceSelection call failed', e);
+          // Ask the workspace/editor to replace the selected text. If the
+          // editor API is not yet available, queue the replacement and notify
+          // the user.
+          if (workspaceApiRef.current && workspaceApiRef.current.replaceSelection) {
+            try {
+              workspaceApiRef.current.replaceSelection(newText);
+            } catch (e) {
+              console.error('App: replaceSelection call failed', e);
+              toast.error('텍스트 적용에 실패했습니다. 콘솔을 확인하세요.');
+            }
+          } else {
+            console.warn('App: replaceSelection called but editor API not ready; queuing replacement');
+            pendingReplacementRef.current = newText;
+            toast('편집기가 준비되지 않았습니다. 열려있는 문서에 제안사항을 적용하면 자동으로 반영됩니다.');
           }
           // Clear selection state in App and hide highlight
           clearSelection();
@@ -443,6 +515,7 @@ function AppContent() {
         onClearHighlight={() => {
           workspaceApiRef.current?.clearHighlight?.();
         }}
+        onFocusDocument={(name: string | undefined | null) => focusDocumentByName(name)}
       />
       <Toaster
         position="bottom-right"

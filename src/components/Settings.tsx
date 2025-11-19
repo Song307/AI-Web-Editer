@@ -73,7 +73,7 @@ const Settings: React.FC<SettingsProps> = ({
                 : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 hover:border-indigo-500 hover:shadow-md hover:transform hover:-translate-y-0.5'
             }`}
           >
-            {isDarkMode ? '☀️ ' + t.lightMode : '🌙 ' + t.darkMode}
+            {isDarkMode ? '' + t.lightMode : '' + t.darkMode}
           </button>
         </div>
       </div>
@@ -122,7 +122,7 @@ const Settings: React.FC<SettingsProps> = ({
                 : 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white border-indigo-500 shadow-lg transform -translate-y-0.5'
             }`}
           >
-            {isCompactLayout ? '📐 ' + t.spacedLayout : '📦 ' + t.compactLayout}
+            {isCompactLayout ? '' + t.spacedLayout : '' + t.compactLayout}
           </button>
         </div>
       </div>

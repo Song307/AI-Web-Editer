@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Image as ImageIcon, FileEarmarkPdf, Film, Plus, Search } from 'react-bootstrap-icons';
-import { getAllDocuments, Document, saveImage, ImageFile, savePdf, PDFFile, getAllImages, getAllPdfs } from '../utils/db';
+import { getAllDocuments, Document, saveDocument, saveImage, ImageFile, savePdf, PDFFile, getAllImages, getAllPdfs } from '../utils/db';
 
 interface DashboardProps {
   isDarkMode: boolean;
@@ -104,8 +104,28 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
   };
 
   const handleCreateFile = (fileType: 'document' | 'image' | 'pdf') => {
-    // 워크스페이스로 이동하면서 파일 타입 정보 전달
-    navigate('/workspace', { state: { createFileType: fileType } });
+    // For documents, create a persisted document first, then navigate into workspace
+    if (fileType === 'document') {
+      const docId = Date.now().toString();
+      const newDoc: Document = {
+        id: docId,
+        title: '새 문서',
+        content: '',
+        contentType: 'markdown',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      saveDocument(newDoc).then(() => {
+        // refresh dashboard list and navigate into the created document
+        loadDocuments();
+        navigate(`/workspace/${docId}`);
+      }).catch(err => {
+        console.error('문서 생성 실패:', err);
+      });
+    } else {
+      // For images/pdfs we keep previous behavior (open workspace to upload/select)
+      navigate('/workspace', { state: { createFileType: fileType } });
+    }
     setShowNewFileModal(false);
   };
 
