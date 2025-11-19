@@ -32,11 +32,22 @@ export interface AISecretary {
   };
   createdAt: Date;
   updatedAt: Date;
-}export interface Document {
+}
+
+export interface Document {
   id: string;
   title: string;
   content: string;
   contentType: 'html' | 'markdown'; // 저장 형식 추가
+  folderId?: string; // optional folder reference
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  parentId?: string; // 상위 폴더 ID (없으면 루트)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +58,7 @@ export interface ImageFile {
   data: ArrayBuffer; // 이미지 바이너리 데이터
   type: string; // MIME 타입 (image/jpeg, image/png 등)
   size: number; // 파일 크기 (bytes)
+  folderId?: string; // optional folder reference
   createdAt: Date;
 }
 
@@ -56,6 +68,7 @@ export interface PDFFile {
   data: ArrayBuffer; // PDF 바이너리 데이터
   type: string; // MIME 타입 (application/pdf)
   size: number; // 파일 크기 (bytes)
+  folderId?: string; // optional folder reference
   createdAt: Date;
 }
 
@@ -65,6 +78,7 @@ export interface VideoFile {
   data: ArrayBuffer; // 동영상 바이너리 데이터
   type: string; // MIME 타입 (video/mp4, video/webm 등)
   size: number; // 파일 크기 (bytes)
+  folderId?: string; // optional folder reference
   createdAt: Date;
 }
 
@@ -93,13 +107,14 @@ export interface AIConversation {
 
 
 const DB_NAME = 'AITextEditorDB';
-const DB_VERSION = 13; // 버전 올림 - AI 대화 세션 추가
+const DB_VERSION = 15; // 버전 올림 - 폴더에 parentId 추가 (중첩 폴더)
 const DOCUMENTS_STORE = 'documents';
 const IMAGES_STORE = 'images';
 const PDFS_STORE = 'pdfs';
 const VIDEOS_STORE = 'videos';
 const AI_SECRETARIES_STORE = 'aiSecretaries';
 const AI_CONVERSATIONS_STORE = 'aiConversations';
+const FOLDERS_STORE = 'folders';
 
 let db: IDBDatabase | null = null;
 
@@ -174,7 +189,7 @@ export const initDB = (): Promise<void> => {
   // IndexedDB 초기화 성공 (로그 제거)
 
       // 필수 객체 스토어가 모두 있는지 확인
-      const requiredStores = [DOCUMENTS_STORE, IMAGES_STORE, PDFS_STORE, VIDEOS_STORE, AI_SECRETARIES_STORE];
+      const requiredStores = [DOCUMENTS_STORE, IMAGES_STORE, PDFS_STORE, VIDEOS_STORE, AI_SECRETARIES_STORE, FOLDERS_STORE];
       const missingStores = requiredStores.filter(store => !db!.objectStoreNames.contains(store));
       
       if (missingStores.length > 0) {
@@ -251,6 +266,15 @@ export const initDB = (): Promise<void> => {
         aiConversationStore.createIndex('createdAt', 'createdAt', { unique: false });
         aiConversationStore.createIndex('updatedAt', 'updatedAt', { unique: false });
   // AI 대화 저장소 생성됨 (로그 제거)
+      }
+
+      // 폴더 저장소 (신규)
+      if (!upgradeDb.objectStoreNames.contains(FOLDERS_STORE)) {
+        const folderStore = upgradeDb.createObjectStore(FOLDERS_STORE, { keyPath: 'id' });
+        folderStore.createIndex('name', 'name', { unique: false });
+        folderStore.createIndex('createdAt', 'createdAt', { unique: false });
+        // parentId 인덱스 추가하여 중첩 폴더(하위 폴더 검색)를 효율화합니다.
+        folderStore.createIndex('parentId', 'parentId', { unique: false });
       }
 
   // 데이터베이스 업그레이드 완료 (로그 제거)
@@ -498,6 +522,66 @@ export const updatePdf = async (id: string, updates: Partial<PDFFile>): Promise<
 
   // 저장
   return savePdf(updatedPdf);
+};
+
+// ===== 폴더 관련 함수들 =====
+
+export const saveFolder = async (folder: Folder): Promise<void> => {
+  if (!db) await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db!.transaction([FOLDERS_STORE], 'readwrite');
+    const store = transaction.objectStore(FOLDERS_STORE);
+    const request = store.put(folder);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+};
+
+export const getFolder = async (id: string): Promise<Folder | null> => {
+  if (!db) await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db!.transaction([FOLDERS_STORE], 'readonly');
+    const store = transaction.objectStore(FOLDERS_STORE);
+    const request = store.get(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+};
+
+export const getAllFolders = async (): Promise<Folder[]> => {
+  if (!db) await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db!.transaction([FOLDERS_STORE], 'readonly');
+    const store = transaction.objectStore(FOLDERS_STORE);
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+};
+
+export const deleteFolder = async (id: string): Promise<void> => {
+  if (!db) await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db!.transaction([FOLDERS_STORE], 'readwrite');
+    const store = transaction.objectStore(FOLDERS_STORE);
+    const request = store.delete(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+};
+
+export const updateFolder = async (id: string, updates: Partial<Folder>): Promise<void> => {
+  if (!db) await initDB();
+
+  const existing = await getFolder(id);
+  if (!existing) throw new Error('Folder not found');
+
+  const updated: Folder = { ...existing, ...updates, updatedAt: new Date() };
+  return saveFolder(updated);
 };
 
 // ===== 동영상 관련 함수들 =====

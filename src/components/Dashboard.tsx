@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Image as ImageIcon, FileEarmarkPdf, Film, Plus, Search } from 'react-bootstrap-icons';
-import { getAllDocuments, Document, saveDocument, saveImage, ImageFile, savePdf, PDFFile, getAllImages, getAllPdfs, getDocument } from '../utils/db';
+import { FileText, Image as ImageIcon, FileEarmarkPdf, Film, Plus, Search, Folder as FolderIcon, ChevronRight, House } from 'react-bootstrap-icons';
+import { getAllDocuments, Document, saveDocument, saveImage, ImageFile, savePdf, PDFFile, getAllImages, getAllPdfs, getDocument, updateDocument, updateImage, updatePdf, Folder, getAllFolders, saveFolder, updateFolder } from '../utils/db';
 import { db, auth } from '../firebase';
 import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -13,14 +13,19 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [images, setImages] = useState<ImageFile[]>([]);
   const [pdfs, setPdfs] = useState<PDFFile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewFileModal, setShowNewFileModal] = useState(false);
+  const [modalSelectedFolderId, setModalSelectedFolderId] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState('');
   const [user, setUser] = useState<User | null>(null);
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [dragOverBreadcrumbId, setDragOverBreadcrumbId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
-  const [syncProgress, setSyncProgress] = useState<number>(0); // 0 - 100
   const [syncMeta, setSyncMeta] = useState<{
     lastSync?: Date | null;
     uploaded?: number;
@@ -126,6 +131,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
 
   const loadDocuments = async () => {
     const docs = await getAllDocuments();
+    const flds = await getAllFolders();
     const imgs = await getAllImages();
     const pdfFiles = await getAllPdfs();
     
@@ -136,52 +142,118 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
     });
     
     setDocuments(sortedDocs);
+    setFolders(flds.sort((a,b) => (new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())));
     setImages(imgs);
     setPdfs(pdfFiles);
   };
 
-  const filteredDocuments = documents.filter(doc =>
-    doc.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // 모든 파일 타입을 하나의 배열로 합치기
-  const allFiles = [
-    ...documents.map(doc => ({ ...doc, fileType: 'document' as const })),
-    ...images.map(img => ({ ...img, fileType: 'image' as const, title: img.name })),
-    ...pdfs.map(pdf => ({ ...pdf, fileType: 'pdf' as const, title: pdf.name }))
-  ].sort((a, b) => {
-    const dateA = new Date(a.createdAt).getTime();
-    const dateB = new Date(b.createdAt).getTime();
-    return dateB - dateA;
-  });
-
-  const filteredFiles = allFiles.filter(file =>
-    file.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const getFileIcon = (type: string) => {
-    switch (type) {
-      case 'document':
-        return <FileText className="w-8 h-8 text-blue-500" />;
-      case 'image':
-        return <ImageIcon className="w-8 h-8 text-green-500" />;
-      case 'pdf':
-        return <FileEarmarkPdf className="w-8 h-8 text-red-500" />;
-      case 'video':
-        return <Film className="w-8 h-8 text-purple-500" />;
-      default:
-        return <FileText className="w-8 h-8 text-gray-500" />;
+  const handleCreateFolder = async () => {
+    const name = prompt('새 폴더 이름을 입력하세요');
+    if (!name) return;
+    const folder: Folder = {
+      id: Date.now().toString(),
+      name,
+      parentId: activeFolderId || undefined,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    try {
+      await saveFolder(folder);
+      toast.success('폴더 생성 완료');
+      await loadDocuments();
+    } catch (err) {
+      console.error('폴더 생성 실패', err);
+      toast.error('폴더 생성에 실패했습니다.');
     }
   };
+  // Helper: Build folder chain from root -> given folderId
+  const getFolderChain = (folderId: string | null): Folder[] => {
+    if (!folderId) return [];
+    const map = new Map(folders.map(f => [f.id, f]));
+    const chain: Folder[] = [];
+    let cur: string | null = folderId;
+    while (cur) {
+      const f = map.get(cur);
+      if (!f) break;
+      chain.push(f);
+      cur = f.parentId || null;
+    }
+    return chain.reverse();
+  };
 
-  const handleFileClick = (file: (Document & { fileType: 'document' }) | (ImageFile & { fileType: 'image' }) | (PDFFile & { fileType: 'pdf' })) => {
-    // 워크스페이스로 이동하면서 파일 정보 전달
+  // Helper: detect if moving draggedId into targetId would create a cycle
+  const isMoveIntoDescendant = (draggedId: string, targetId: string) => {
+    let cur: string | null = targetId;
+    const map = new Map(folders.map(f => [f.id, f]));
+    while (cur) {
+      if (cur === draggedId) return true;
+      const f = map.get(cur);
+      if (!f) break;
+      cur = f.parentId || null;
+    }
+    return false;
+  };
+
+  const getFileIcon = (fileType: string) => {
+    if (fileType === 'document') return <FileText size={36} className="text-blue-500" />;
+    if (fileType === 'image') return <ImageIcon size={36} className="text-green-500" />;
+    if (fileType === 'pdf') return <FileEarmarkPdf size={36} className="text-red-500" />;
+    return <FileText size={36} className="text-gray-500" />;
+  };
+
+  const handleFileClick = (file: any) => {
     if (file.fileType === 'document') {
       navigate(`/workspace/${file.id}`);
     } else if (file.fileType === 'image') {
       navigate('/workspace', { state: { imageId: file.id } });
     } else if (file.fileType === 'pdf') {
       navigate('/workspace', { state: { pdfId: file.id } });
+    }
+  };
+
+  const handleCreateFolderFromModal = async () => {
+    if (!newFolderName) {
+      toast.error('폴더 이름을 입력하세요');
+      return;
+    }
+    const folder: Folder = {
+      id: Date.now().toString(),
+      name: newFolderName,
+      parentId: modalSelectedFolderId || activeFolderId || undefined,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    try {
+      await saveFolder(folder);
+      toast.success('폴더 생성 완료');
+      setNewFolderName('');
+      setModalSelectedFolderId(folder.id);
+      await loadDocuments();
+    } catch (err) {
+      console.error('모달 폴더 생성 실패', err);
+      toast.error('폴더 생성 실패');
+    }
+  };
+
+  const handleCreateDocumentFromModal = async () => {
+    const docId = Date.now().toString();
+    const newDoc: Document = {
+      id: docId,
+      title: '새 문서',
+      content: '',
+      contentType: 'markdown',
+      folderId: modalSelectedFolderId || activeFolderId || undefined,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    try {
+      await saveDocument(newDoc);
+      await loadDocuments();
+      setShowNewFileModal(false);
+      navigate(`/workspace/${docId}`);
+    } catch (err) {
+      console.error('모달에서 문서 생성 실패', err);
+      toast.error('문서 생성 실패');
     }
   };
 
@@ -194,6 +266,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
         title: '새 문서',
         content: '',
         contentType: 'markdown',
+        folderId: activeFolderId || undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -206,7 +279,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
       });
     } else {
       // For images/pdfs we keep previous behavior (open workspace to upload/select)
-      navigate('/workspace', { state: { createFileType: fileType } });
+      navigate('/workspace', { state: { createFileType: fileType, parentFolderId: activeFolderId } });
     }
     setShowNewFileModal(false);
   };
@@ -227,6 +300,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
             data: arrayBuffer,
             type: file.type,
             size: file.size,
+            folderId: modalSelectedFolderId || activeFolderId || undefined,
             createdAt: new Date()
           };
           await saveImage(imageFile);
@@ -245,6 +319,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
             data: arrayBuffer,
             type: file.type,
             size: file.size,
+            folderId: modalSelectedFolderId || activeFolderId || undefined,
             createdAt: new Date()
           };
           await savePdf(pdfFile);
@@ -283,7 +358,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
     }
 
     setIsSyncing(true);
-    setSyncProgress(0);
     try {
       console.log('📤 Firestore에 문서 업로드 시작...');
       console.log('📊 업로드할 문서 수:', documents.length);
@@ -313,10 +387,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
 
           uploadSuccessCount++;
           // update progress (upload phase = 0-50%)
-          if (documents.length > 0) {
-            const pct = Math.floor(((i + 1) / documents.length) * 50);
-            setSyncProgress(pct);
-          }
+          // upload progress tracked internally (no UI progress bar)
           console.log(`✅ [${i + 1}/${documents.length}] 업로드 성공:`, document.title);
         } catch (docError) {
           uploadFailCount++;
@@ -334,7 +405,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
       }
 
       console.log(`📊 업로드 결과: 성공 ${uploadSuccessCount}개, 실패 ${uploadFailCount}개`);
-      setSyncProgress(50);
+      // upload phase completed
 
       console.log('📥 Firestore에서 문서 다운로드 시작...');
       // Download documents from Firestore with timeout
@@ -376,17 +447,11 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
             downloadSuccessCount++;
             console.log(`💾 [${i + 1}/${querySnapshot.docs.length}] 로컬 DB에 저장됨:`, data.title);
             // update progress (download phase = 50-100%)
-            if (querySnapshot.docs.length > 0) {
-              const pct = 50 + Math.floor(((i + 1) / querySnapshot.docs.length) * 50);
-              setSyncProgress(pct);
-            }
+            // download progress tracked internally (no UI progress bar)
           } else {
             downloadSkipCount++;
             console.log(`⏭️ [${i + 1}/${querySnapshot.docs.length}] 이미 존재함, 건너뜀:`, data.title);
-            if (querySnapshot.docs.length > 0) {
-              const pct = 50 + Math.floor(((i + 1) / querySnapshot.docs.length) * 50);
-              setSyncProgress(pct);
-            }
+            // download progress tracked internally (no UI progress bar)
           }
         } catch (saveError) {
           console.error(`❌ [${i + 1}/${querySnapshot.docs.length}] 로컬 저장 실패:`, data.title, saveError);
@@ -398,7 +463,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
       await loadDocuments(); // Refresh
       const finishedAt = new Date();
       setLastSyncAt(finishedAt);
-      setSyncProgress(100);
+      // sync finished
       const metaToStore = {
         lastSync: finishedAt.toISOString(),
         uploaded: uploadSuccessCount,
@@ -454,6 +519,20 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
     return date.toLocaleString('ko-KR');
   };
 
+  // Derived lists for rendering
+  const allFiles = [
+    ...documents.map(d => ({ ...d, fileType: 'document' as const, title: d.title })),
+    ...images.map(img => ({ ...img, fileType: 'image' as const, title: img.name })),
+    ...pdfs.map(p => ({ ...p, fileType: 'pdf' as const, title: p.name })),
+  ];
+
+  const visibleFolders = folders.filter(f => (activeFolderId ? f.parentId === activeFolderId : !f.parentId));
+
+  const visibleFiles = allFiles.filter(file => (activeFolderId ? file.folderId === activeFolderId : !file.folderId));
+
+  const filteredFiles = searchQuery ? visibleFiles.filter(f => (f.title || '').toLowerCase().includes(searchQuery.toLowerCase())) : visibleFiles;
+
+
   return (
     <div className="h-screen bg-white dark:bg-gray-900 overflow-hidden flex flex-col">
       {/* 헤더 */}
@@ -461,18 +540,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">대시보드</h1>
         </div>
-        {/* Loader bar */}
-        <div className="relative">
-          <div className={`h-1 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden ${isSyncing || syncProgress > 0 ? 'opacity-100' : 'opacity-0'} transition-opacity`}>
-            <div
-              style={{ width: `${syncProgress}%` }}
-              className={`h-full bg-gradient-to-r from-green-400 to-blue-500 transition-all ${isSyncing ? 'animate-stripes' : ''}`}
-            />
-          </div>
-          {isSyncing && (
-            <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">동기화 진행 중 — {syncProgress}%</div>
-          )}
-        </div>
+        {/* (Loader moved into sync tooltip) */}
         
         {/* 검색 바와 동기화 버튼 */}
         <div className="flex gap-4">
@@ -523,8 +591,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
                   </div>
                 </div>
 
+
                 {/* 통계: 업로드/다운로드 성공/실패 카운트 */}
-                <div className="mt-3 text-sm">
+                <div className="mt-2 text-sm">
                   <div className={`text-xs ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>업로드: {syncMeta?.uploaded ?? '-' } 성공 / {syncMeta?.uploadFailed ?? '-'} 실패</div>
                   <div className={`text-xs ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>다운로드: {syncMeta?.downloaded ?? '-'} 새로 저장 / {syncMeta?.downloadSkipped ?? '-'} 건너뜀</div>
                 </div>
@@ -539,21 +608,238 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
       </div>
 
       {/* 파일 그리드 */}
+      <div className="px-6 pb-4">
+        <nav className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+            <button
+              onClick={() => setActiveFolderId(null)}
+              onDragOver={(e) => { e.preventDefault(); setDragOverBreadcrumbId('root'); }}
+              onDragLeave={() => setDragOverBreadcrumbId(null)}
+              onDrop={async (e) => {
+                e.preventDefault();
+                setDragOverBreadcrumbId(null);
+                try {
+                  const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+                  const payload = JSON.parse(raw);
+                  const { id, fileType } = payload as { id: string; fileType: string };
+                  if (fileType === 'document') {
+                    await updateDocument(id, { folderId: undefined });
+                    toast.success('문서를 상위(루트)로 이동했습니다.');
+                    await loadDocuments();
+                  } else if (fileType === 'image') {
+                    await updateImage(id, { folderId: undefined } as any);
+                    toast.success('이미지를 상위(루트)로 이동했습니다.');
+                    await loadDocuments();
+                  } else if (fileType === 'pdf') {
+                    await updatePdf(id, { folderId: undefined } as any);
+                    toast.success('PDF를 상위(루트)로 이동했습니다.');
+                    await loadDocuments();
+                  } else if (fileType === 'folder') {
+                    // Move folder to root
+                    await updateFolder(id, { parentId: undefined });
+                    toast.success('폴더를 상위(루트)로 이동했습니다.');
+                    await loadDocuments();
+                  }
+                } catch (err) {
+                  console.error('상위(루트)로 이동 실패', err);
+                  toast.error('폴더 이동 중 오류가 발생했습니다.');
+                }
+              }}
+              className={`flex items-center gap-1 ${!activeFolderId ? 'font-semibold' : 'hover:underline'} ${dragOverBreadcrumbId === 'root' ? 'bg-blue-50 rounded px-1' : ''}`}
+            >
+              <House className="w-4 h-4" />
+              <span>root</span>
+            </button>
+            {activeFolderId && (() => {
+              const chain = getFolderChain(activeFolderId);
+              return (
+                <>
+                  {chain.map((f, idx) => (
+                    <React.Fragment key={`crumb-${f.id}`}>
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                      {idx < chain.length - 1 ? (
+                        <button
+                          onClick={() => setActiveFolderId(f.id)}
+                          onDragOver={(e) => { e.preventDefault(); setDragOverBreadcrumbId(f.id); }}
+                          onDragLeave={() => setDragOverBreadcrumbId(null)}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            setDragOverBreadcrumbId(null);
+                            try {
+                              const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+                              const payload = JSON.parse(raw);
+                              const { id, fileType } = payload as { id: string; fileType: string };
+                              if (fileType === 'document') {
+                                await updateDocument(id, { folderId: f.id });
+                                toast.success('문서를 선택한 상위 폴더로 이동했습니다.');
+                                await loadDocuments();
+                              } else if (fileType === 'image') {
+                                await updateImage(id, { folderId: f.id } as any);
+                                toast.success('이미지를 선택한 상위 폴더로 이동했습니다.');
+                                await loadDocuments();
+                              } else if (fileType === 'pdf') {
+                                await updatePdf(id, { folderId: f.id } as any);
+                                toast.success('PDF를 선택한 상위 폴더로 이동했습니다.');
+                                await loadDocuments();
+                              } else if (fileType === 'folder') {
+                                const draggedFolderId = id;
+                                const targetFolderId = f.id;
+                                if (draggedFolderId === targetFolderId || isMoveIntoDescendant(draggedFolderId, targetFolderId)) {
+                                  toast.error('폴더를 그 폴더의 하위로 이동할 수 없습니다.');
+                                } else {
+                                  await updateFolder(draggedFolderId, { parentId: targetFolderId });
+                                  toast.success('폴더를 선택한 상위 폴더로 이동했습니다.');
+                                  await loadDocuments();
+                                }
+                              }
+                            } catch (err) {
+                              console.error('상위 폴더로 이동 실패', err);
+                              toast.error('폴더 이동 중 오류가 발생했습니다.');
+                            }
+                          }}
+                          className={`${dragOverBreadcrumbId === f.id ? 'bg-blue-50 rounded px-1' : 'hover:underline'}`}
+                        >
+                          {f.name}
+                        </button>
+                      ) : (
+                        <span
+                          onDragOver={(e) => { e.preventDefault(); setDragOverBreadcrumbId(f.id); }}
+                          onDragLeave={() => setDragOverBreadcrumbId(null)}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            setDragOverBreadcrumbId(null);
+                            try {
+                              const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+                              const payload = JSON.parse(raw);
+                              const { id, fileType } = payload as { id: string; fileType: string };
+                              if (fileType === 'document') {
+                                await updateDocument(id, { folderId: f.id });
+                                toast.success('문서를 선택한 상위 폴더로 이동했습니다.');
+                                await loadDocuments();
+                              } else if (fileType === 'image') {
+                                await updateImage(id, { folderId: f.id } as any);
+                                toast.success('이미지를 선택한 상위 폴더로 이동했습니다.');
+                                await loadDocuments();
+                              } else if (fileType === 'pdf') {
+                                await updatePdf(id, { folderId: f.id } as any);
+                                toast.success('PDF를 선택한 상위 폴더로 이동했습니다.');
+                                await loadDocuments();
+                              } else if (fileType === 'folder') {
+                                const draggedFolderId = id;
+                                const targetFolderId = f.id;
+                                if (draggedFolderId === targetFolderId || isMoveIntoDescendant(draggedFolderId, targetFolderId)) {
+                                  toast.error('폴더를 그 폴더의 하위로 이동할 수 없습니다.');
+                                } else {
+                                  await updateFolder(draggedFolderId, { parentId: targetFolderId });
+                                  toast.success('폴더를 선택한 상위 폴더로 이동했습니다.');
+                                  await loadDocuments();
+                                }
+                              }
+                            } catch (err) {
+                              console.error('상위 폴더로 이동 실패', err);
+                              toast.error('폴더 이동 중 오류가 발생했습니다.');
+                            }
+                          }}
+                          className={`${dragOverBreadcrumbId === f.id ? 'bg-blue-50 rounded px-1 font-medium' : 'font-medium'}`}
+                        >{f.name}</span>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </>
+              );
+            })()}
+        </nav>
+      </div>
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 150px))' }}>
-          {/* 새 파일 추가 아이콘 */}
-          <div
-            onClick={() => setShowNewFileModal(true)}
-            className="w-[150px] h-[150px] border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all flex flex-col items-center justify-center group cursor-pointer"
-          >
-            <Plus className="w-10 h-10 text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 mb-2" />
-            <span className="text-sm font-medium text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400">새 파일</span>
-          </div>
+          {/* 폴더들 */}
+          {visibleFolders
+            .map((folder) => (
+            <div
+              key={`folder-${folder.id}`}
+              draggable
+              onDragStart={(e) => {
+                try {
+                  e.dataTransfer.setData('application/json', JSON.stringify({ id: folder.id, fileType: 'folder' }));
+                } catch (err) {
+                  e.dataTransfer.setData('text/plain', JSON.stringify({ id: folder.id, fileType: 'folder' }));
+                }
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onClick={() => setActiveFolderId(activeFolderId === folder.id ? null : folder.id)}
+              onDragOver={(e) => { e.preventDefault(); setDragOverFolderId(folder.id); }}
+              onDragLeave={() => setDragOverFolderId(null)}
+              onDrop={async (e) => {
+                e.preventDefault();
+                setDragOverFolderId(null);
+                try {
+                  const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+                  const payload = JSON.parse(raw);
+                  const { id, fileType } = payload as { id: string; fileType: string };
+                  if (fileType === 'document') {
+                    await updateDocument(id, { folderId: folder.id });
+                  } else if (fileType === 'image') {
+                    await updateImage(id, { folderId: folder.id } as any);
+                  } else if (fileType === 'pdf') {
+                    await updatePdf(id, { folderId: folder.id } as any);
+                  } else if (fileType === 'folder') {
+                    // Prevent moving folder into itself or its descendants
+                    const draggedFolderId = id;
+                    const targetFolderId = folder.id;
+                    const isDescendant = (draggedId: string, targetId: string) => {
+                      let cur: string | null = targetId;
+                      const map = new Map(folders.map(f => [f.id, f]));
+                      while (cur) {
+                        if (cur === draggedId) return true;
+                        const f = map.get(cur) as Folder | undefined;
+                        if (!f) break;
+                        cur = f.parentId || null;
+                      }
+                      return false;
+                    };
+                    if (draggedFolderId === targetFolderId || isDescendant(draggedFolderId, targetFolderId)) {
+                      toast.error('폴더를 그 폴더의 하위로 이동할 수 없습니다.');
+                    } else {
+                      await updateFolder(draggedFolderId, { parentId: targetFolderId });
+                      toast.success('폴더를 이동했습니다.');
+                      await loadDocuments();
+                    }
+                  }
+                  if (fileType !== 'folder') {
+                    toast.success('파일을 폴더로 이동했습니다.');
+                    await loadDocuments();
+                  }
+                } catch (err) {
+                  console.error('폴더로 이동 실패', err);
+                  toast.error('폴더로 이동하지 못했습니다.');
+                }
+              }}
+              className={`w-[150px] h-[150px] rounded-lg p-3 flex flex-col group cursor-pointer border ${dragOverFolderId === folder.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'}`}
+            >
+              <div className="flex-1 flex items-center justify-center mb-2">
+                <FolderIcon className="w-10 h-10 text-yellow-500" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-medium truncate">{folder.name}</h3>
+                <p className="text-xs text-gray-500">{formatDate(folder.createdAt.toString())}</p>
+              </div>
+            </div>
+          ))}
+
+          {/* (새로 만들기 버튼은 파일 리스트 이후에 렌더됩니다) */}
 
           {/* 파일 카드들 */}
-          {filteredFiles.map((file) => (
+          {visibleFiles.map((file) => (
             <div
               key={file.id}
+              draggable
+              onDragStart={(e) => {
+                try {
+                  e.dataTransfer.setData('application/json', JSON.stringify({ id: file.id, fileType: file.fileType }));
+                } catch (err) {
+                  e.dataTransfer.setData('text/plain', JSON.stringify({ id: file.id, fileType: file.fileType }));
+                }
+                e.dataTransfer.effectAllowed = 'move';
+              }}
               onClick={() => handleFileClick(file)}
               className="w-[150px] h-[150px] border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-lg transition-all cursor-pointer bg-white dark:bg-gray-800 p-3 flex flex-col group"
             >
@@ -565,11 +851,25 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
                   {file.title}
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {formatDate(typeof file.createdAt === 'string' ? file.createdAt : file.createdAt.toString())}
+                  {formatDate(typeof (file as any).createdAt === 'string' ? (file as any).createdAt : (file as any).createdAt.toString())}
                 </p>
               </div>
             </div>
           ))}
+
+          {/* 새로 만들기 통합 버튼 (마지막 아이템) */}
+          <div
+            onClick={() => {
+              setModalSelectedFolderId(activeFolderId || null);
+              setShowNewFileModal(true);
+            }}
+            className="w-[150px] h-[150px] border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all flex flex-col items-center justify-center group cursor-pointer"
+          >
+            <svg className="w-10 h-10 text-gray-400 group-hover:text-blue-500 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14M5 12h14" />
+            </svg>
+            <span className="text-sm font-medium text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400">새로 만들기</span>
+          </div>
         </div>
 
         {/* 빈 상태 */}
@@ -592,41 +892,71 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
       {/* 새 파일 모달 */}
       {showNewFileModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">새 파일 만들기</h2>
-            <div className="space-y-3">
-              <button
-                onClick={() => handleCreateFile('document')}
-                className="w-full p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left flex items-center gap-3"
-              >
-                <FileText size={24} className="text-blue-500" />
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+              <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">새로 만들기</h2>
+              <div className="space-y-4">
+                {/* Folder selector */}
                 <div>
-                  <div className="font-medium text-gray-900 dark:text-white">문서</div>
-                  <div className="text-sm text-gray-500">마크다운 문서 생성</div>
+                  <label className="text-sm font-medium block mb-2">위치(폴더 선택)</label>
+                  <select
+                    value={modalSelectedFolderId ?? ''}
+                    onChange={(e) => setModalSelectedFolderId(e.target.value || null)}
+                    className="w-full p-2 border rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="">root</option>
+                    {folders.map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
                 </div>
-              </button>
-              <label className="w-full p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left flex items-center gap-3 cursor-pointer">
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <FileEarmarkPdf size={24} className="text-green-500" />
+
+                {/* Create folder inline */}
                 <div>
-                  <div className="font-medium text-gray-900 dark:text-white">파일 업로드</div>
-                  <div className="text-sm text-gray-500">이미지 또는 PDF 파일 업로드</div>
+                  <label className="text-sm font-medium block mb-2">새 폴더 만들기</label>
+                  <div className="flex gap-2">
+                    <input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="폴더 이름" className="flex-1 p-2 border rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                    <button onClick={handleCreateFolderFromModal} className="px-3 py-2 bg-blue-600 text-white rounded">폴더 생성</button>
+                  </div>
                 </div>
-              </label>
+
+                <div className="space-y-2">
+                  <button
+                    onClick={handleCreateDocumentFromModal}
+                    className="w-full p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left flex items-center gap-3"
+                  >
+                    <FileText size={24} className="text-blue-500" />
+                    <div>
+                      <div className="font-medium text-gray-900 dark:text-white">문서</div>
+                      <div className="text-sm text-gray-500">선택한 폴더에 마크다운 문서 생성</div>
+                    </div>
+                  </button>
+
+                  <label className="w-full p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    <FileEarmarkPdf size={24} className="text-green-500" />
+                    <div>
+                      <div className="font-medium text-gray-900 dark:text-white">파일 업로드</div>
+                      <div className="text-sm text-gray-500">선택한 폴더에 이미지 또는 PDF 업로드</div>
+                    </div>
+                  </label>
+                </div>
+
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => setShowNewFileModal(false)}
+                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition-colors text-gray-900 dark:text-white"
+                >
+                  취소
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => setShowNewFileModal(false)}
-              className="mt-4 w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition-colors text-gray-900 dark:text-white"
-            >
-              취소
-            </button>
           </div>
-        </div>
       )}
     </div>
   );
