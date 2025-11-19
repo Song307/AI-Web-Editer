@@ -23,8 +23,11 @@ interface WorkspaceProps {
   onSelectionRangeChange?: (range: { from: number; to: number } | null) => void;
   onOpenTaskbar?: () => void;
   onRegisterApi?: (api: { replaceSelection: (text: string) => void; highlightSelection: (from: number, to: number) => void; clearHighlight: () => void } | null) => void;
+  onRegisterTabApi?: (api: { setActiveTabByTitle?: (title: string) => void; setActiveTabId?: (id: string | null) => void } | null) => void;
   isRightSidebarOpen?: boolean;
   rightSidebarWidth?: number;
+  isFocusMode?: boolean;
+  isTypewriterMode?: boolean;
 }
 
 const Workspace: React.FC<WorkspaceProps> = ({
@@ -33,8 +36,11 @@ const Workspace: React.FC<WorkspaceProps> = ({
   onSelectionRangeChange,
   onOpenTaskbar,
   onRegisterApi,
+  onRegisterTabApi,
   isRightSidebarOpen = false,
   rightSidebarWidth = 320,
+  isFocusMode = false,
+  isTypewriterMode = false,
 }) => {
   const editorRef = useRef<any>(null);
   const navigate = useNavigate();
@@ -52,6 +58,28 @@ const Workspace: React.FC<WorkspaceProps> = ({
     // API 등록은 이제 Editor의 onApiReady 콜백을 통해 이루어짐
     // cleanup은 필요 없음 - App에서 null을 받았을 때 특별한 처리 없음
   }, [activeTabId, onRegisterApi]);
+
+  // Register tab API so parent (App) can request tab activation by title or id
+  useEffect(() => {
+    if (!onRegisterTabApi) return;
+    const api = {
+      setActiveTabByTitle: (title: string) => {
+        const found = taskList.find(tab => tab.title === title || tab.title?.includes(title));
+        if (found) {
+          setActiveTabId(found.id);
+        }
+      },
+      setActiveTabId: (id: string | null) => {
+        setActiveTabId(id);
+      }
+    };
+    onRegisterTabApi(api);
+    return () => {
+      try {
+        onRegisterTabApi(null);
+      } catch (e) {}
+    };
+  }, [taskList, onRegisterTabApi]);
 
   // 업로드된 파일 처리
   useEffect(() => {
@@ -84,67 +112,104 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
   // Dashboard에서 전달된 파일 생성 요청 처리
   useEffect(() => {
-    const loadFileFromState = async () => {
-      if (location.state?.createFileType) {
-        const fileType = location.state.createFileType as 'document' | 'image' | 'pdf';
-        const newTab: Tab = {
-          id: `new-${fileType}-${Date.now()}`,
-          title: `새 ${fileType === 'document' ? '문서' : fileType === 'image' ? '이미지' : 'PDF'}`,
-          type: fileType
-        };
-        setTaskList(prev => [...prev, newTab]);
-        setActiveTabId(newTab.id);
-        // state 초기화
-        navigate('/workspace', { replace: true, state: {} });
-      } else if (location.state?.imageId) {
-        // 이미지 파일 열기
-        const imageId = location.state.imageId;
-        try {
-          const imageFile = await getImage(imageId);
-          if (imageFile) {
-            // 이미지 파일을 File 객체로 변환
-            const file = new File([imageFile.data], imageFile.name, { type: imageFile.type });
-            const newTab: Tab = {
-              id: `image-${imageId}-${Date.now()}`,
-              title: imageFile.name,
-              type: 'image',
-              file: file
-            };
-            setTaskList(prev => [...prev, newTab]);
-            setActiveTabId(newTab.id);
-          }
-        } catch (error) {
-          console.error('이미지 파일 로드 실패:', error);
-          toast.error('이미지 파일을 불러올 수 없습니다.');
+    if (location.state?.createFileType) {
+      const fileType = location.state.createFileType as 'document' | 'image' | 'pdf';
+      // ensure we don't create duplicate temporary tabs if effect runs multiple times
+      ensureTempTab(fileType);
+      // state 초기화
+      navigate('/workspace', { replace: true, state: {} });
+    }
+  }, [location.state?.createFileType, navigate]);
+
+  // 이미지 파일 로드
+  useEffect(() => {
+    if (!location.state?.imageId) return;
+
+    const imageId = location.state.imageId;
+    if (loadingIdsRef.current.has(imageId)) return; // 이미 로딩 중이면 중단
+
+    loadingIdsRef.current.add(imageId);
+    const loadImage = async () => {
+      try {
+        const imageFile = await getImage(imageId);
+        if (imageFile) {
+          setTaskList(prev => {
+            const existingTab = prev.find(tab => tab.type === 'image' && tab.id.startsWith(`image-${imageId}-`));
+            if (existingTab) {
+              setActiveTabId(existingTab.id);
+              return prev;
+            } else {
+              const file = new File([imageFile.data], imageFile.name, { type: imageFile.type });
+              const newTab: Tab = {
+                id: `image-${imageId}-${Date.now()}`,
+                title: imageFile.name,
+                type: 'image',
+                file: file
+              };
+              setActiveTabId(newTab.id);
+              return [...prev, newTab];
+            }
+          });
+        } else {
+          console.error('이미지 파일을 찾을 수 없습니다:', imageId);
+          toast.error('이미지 파일을 찾을 수 없습니다.');
         }
-        navigate('/workspace', { replace: true, state: {} });
-      } else if (location.state?.pdfId) {
-        // PDF 파일 열기
-        const pdfId = location.state.pdfId;
-        try {
-          const pdfFile = await getPdf(pdfId);
-          if (pdfFile) {
-            // PDF 파일을 File 객체로 변환
-            const file = new File([pdfFile.data], pdfFile.name, { type: pdfFile.type });
-            const newTab: Tab = {
-              id: `pdf-${pdfId}-${Date.now()}`,
-              title: pdfFile.name,
-              type: 'pdf',
-              file: file
-            };
-            setTaskList(prev => [...prev, newTab]);
-            setActiveTabId(newTab.id);
-          }
-        } catch (error) {
-          console.error('PDF 파일 로드 실패:', error);
-          toast.error('PDF 파일을 불러올 수 없습니다.');
-        }
-        navigate('/workspace', { replace: true, state: {} });
+      } catch (error) {
+        console.error('이미지 파일 로드 실패:', error);
+        toast.error('이미지 파일을 불러올 수 없습니다.');
+      } finally {
+        loadingIdsRef.current.delete(imageId);
       }
+      navigate('/workspace', { replace: true, state: {} });
     };
 
-    loadFileFromState();
-  }, [location.state, navigate]);
+    loadImage();
+  }, [location.state?.imageId, navigate]);
+
+  // PDF 파일 로드
+  useEffect(() => {
+    if (!location.state?.pdfId) return;
+
+    const pdfId = location.state.pdfId;
+    if (loadingIdsRef.current.has(pdfId)) return; // 이미 로딩 중이면 중단
+
+    loadingIdsRef.current.add(pdfId);
+    const loadPdf = async () => {
+      try {
+        const pdfFile = await getPdf(pdfId);
+        if (pdfFile) {
+          setTaskList(prev => {
+            const existingTab = prev.find(tab => tab.type === 'pdf' && tab.id.startsWith(`pdf-${pdfId}-`));
+            if (existingTab) {
+              setActiveTabId(existingTab.id);
+              return prev;
+            } else {
+              const file = new File([pdfFile.data], pdfFile.name, { type: pdfFile.type });
+              const newTab: Tab = {
+                id: `pdf-${pdfId}-${Date.now()}`,
+                title: pdfFile.name,
+                type: 'pdf',
+                file: file
+              };
+              setActiveTabId(newTab.id);
+              return [...prev, newTab];
+            }
+          });
+        } else {
+          console.error('PDF 파일을 찾을 수 없습니다:', pdfId);
+          toast.error('PDF 파일을 찾을 수 없습니다.');
+        }
+      } catch (error) {
+        console.error('PDF 파일 로드 실패:', error);
+        toast.error('PDF 파일을 불러올 수 없습니다.');
+      } finally {
+        loadingIdsRef.current.delete(pdfId);
+      }
+      navigate('/workspace', { replace: true, state: {} });
+    };
+
+    loadPdf();
+  }, [location.state?.pdfId, navigate]);
 
   // dataURL을 Blob으로 변환하는 헬퍼 함수
   const dataURLToBlob = (dataURL: string): Blob => {
@@ -166,6 +231,27 @@ const Workspace: React.FC<WorkspaceProps> = ({
   }, [taskList]);
   // Guard set for documentIds currently being loaded to avoid duplicate load flows
   const loadingIdsRef = useRef<Set<string>>(new Set());
+  // If we requested focus for a document load but the Editor wasn't ready yet,
+  // store the docId here and focus when the Editor registers its API.
+  const pendingFocusDocRef = useRef<string | null>(null);
+
+  // Ensure there's at most one temporary (unsaved) tab per type. If found, activate and return its id.
+  const ensureTempTab = React.useCallback((fileType: 'document' | 'image' | 'pdf') => {
+    const existing = taskList.find(t => !t.documentId && t.type === fileType && (t.title?.startsWith('새 ') || t.id.startsWith(`new-${fileType}-`)));
+    if (existing) {
+      setActiveTabId(existing.id);
+      return existing.id;
+    }
+
+    const newTab: Tab = {
+      id: `new-${fileType}-${Date.now()}`,
+      title: `새 ${fileType === 'document' ? '문서' : fileType === 'image' ? '이미지' : 'PDF'}`,
+      type: fileType
+    };
+    setTaskList(prev => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+    return newTab.id;
+  }, [taskList]);
 
   // Quick mount log to help debug blank screen when DevTools console is empty
   // Log on initial mount so we always get a trace when Workspace mounts
@@ -250,6 +336,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
     loadingIdsRef.current.add(docId);
 
     try {
+      // mark that we want to focus the editor for this doc once it's ready
+      pendingFocusDocRef.current = docId;
       console.groupCollapsed(`[Workspace] loadDocument called -> docId=${docId}`);
       const doc = await getDocument(docId);
       console.log('getDocument result:', doc);
@@ -265,6 +353,14 @@ const Workspace: React.FC<WorkspaceProps> = ({
             existingId = existing.id;
             // update the existing task's content/title so the Editor receives the content
             return prev.map(t => t.id === existing.id ? { ...t, content: doc, title: doc.title || t.title } : t);
+          }
+
+          // If there's an unsaved (temporary) tab that likely corresponds to this document
+          // (e.g. id starts with 'new-' and title matches), convert that tab into the persisted one
+          const tempMatch = prev.find(task => !task.documentId && (task.title === doc.title || task.title?.startsWith('새 ')));
+          if (tempMatch) {
+            createdId = tempMatch.id;
+            return prev.map(t => t.id === tempMatch.id ? { ...t, content: doc, title: doc.title, documentId: docId, type: 'document' } : t);
           }
 
           // create new task only if not present
@@ -284,9 +380,26 @@ const Workspace: React.FC<WorkspaceProps> = ({
         if (existingId) {
           setActiveTabId(existingId);
           console.log('Activated existing tab:', existingId);
+          // If editor ref already available, focus immediately
+          try {
+            if (editorRef.current && typeof (editorRef.current as any).focus === 'function') {
+              (editorRef.current as any).focus();
+              pendingFocusDocRef.current = null;
+            }
+          } catch (err) {
+            console.warn('Immediate focus attempt failed', err);
+          }
         } else if (createdId) {
           setActiveTabId(createdId);
           console.log('Created and activated new tab:', createdId);
+          try {
+            if (editorRef.current && typeof (editorRef.current as any).focus === 'function') {
+              (editorRef.current as any).focus();
+              pendingFocusDocRef.current = null;
+            }
+          } catch (err) {
+            console.warn('Immediate focus attempt failed', err);
+          }
         }
       } else {
         console.warn(`[Workspace] getDocument returned null for id=${docId}`);
@@ -309,9 +422,25 @@ const Workspace: React.FC<WorkspaceProps> = ({
   };
 
   const handleCloseTab = (tabId: string) => {
+    console.log('handleCloseTab called with tabId:', tabId);
+    console.log('current taskList:', taskList);
+    console.log('current activeTabId:', activeTabId);
+
     const tabIndex = taskList.findIndex(tab => tab.id === tabId);
     const newTasks = taskList.filter(tab => tab.id !== tabId);
+    console.log('newTasks after filter:', newTasks);
+
     setTaskList(newTasks);
+
+    // Immediately persist the updated tasks to cookie to avoid race conditions
+    try {
+      const minimalTasks = newTasks.map(t => ({ id: t.id, title: t.title, type: t.type, documentId: t.documentId }));
+      const expirationDate = new Date();
+      expirationDate.setDate(expirationDate.getDate() + 7);
+      document.cookie = `workspaceTasks=${encodeURIComponent(JSON.stringify(minimalTasks))}; expires=${expirationDate.toUTCString()}; path=/`;
+    } catch (err) {
+      console.error('Failed to persist workspace tasks to cookie after tab close', err);
+    }
 
     // 닫은 탭이 활성 탭이었다면 다른 탭 활성화
     if (activeTabId === tabId && newTasks.length > 0) {
@@ -367,13 +496,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
   };
 
   const handleCreateFile = (fileType: 'document' | 'image' | 'pdf') => {
-    const newTab: Tab = {
-      id: `new-${fileType}-${Date.now()}`,
-      title: `새 ${fileType === 'document' ? '문서' : fileType === 'image' ? '이미지' : 'PDF'}`,
-      type: fileType
-    };
-    setTaskList(prev => [...prev, newTab]);
-    setActiveTabId(newTab.id);
+    // create or focus an existing temporary tab of the requested type
+    ensureTempTab(fileType);
     setShowNewFileModal(false);
   };
 
@@ -441,9 +565,12 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
     // Preserve tasks that weren't touched by editor updates
     const updatedIds = new Set(mapped.map(m => m.id));
-    const preserved = taskList.filter(t => !updatedIds.has(t.id));
-    const final = [...preserved, ...mapped];
-    setTaskList(final);
+    // Use functional updater to avoid stale closure over `taskList`
+    setTaskList(prev => {
+      const preserved = prev.filter(t => !updatedIds.has(t.id));
+      const final = [...preserved, ...mapped];
+      return final;
+    });
   };
 
   // taskList가 변경될 때마다 로그 남기기
@@ -500,6 +627,27 @@ const Workspace: React.FC<WorkspaceProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // When Editor registers its API, forward to parent and handle any pending focus requests
+  const handleEditorApiReady = (api: { replaceSelection?: (text: string) => void; highlightSelection?: (from: number, to: number) => void; clearHighlight?: () => void } | null) => {
+    try {
+      if (onRegisterApi) onRegisterApi(api as any);
+    } catch (err) {
+      console.error('handleEditorApiReady: forwarding api failed', err);
+    }
+
+    // If we had requested focus for a doc load, and editor ref is available, call focus
+    if (pendingFocusDocRef.current) {
+      try {
+        if (editorRef.current && typeof (editorRef.current as any).focus === 'function') {
+          (editorRef.current as any).focus();
+          pendingFocusDocRef.current = null;
+        }
+      } catch (err) {
+        console.warn('handleEditorApiReady: focus call failed', err);
+      }
+    }
+  };
+
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900">
       {/* Debug panel when ?debug=1 is present in URL */}
@@ -534,12 +682,14 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 onSelectionRangeChange={onSelectionRangeChange}
                 onOpenTaskbar={onOpenTaskbar}
                 onOpenDocument={(docId: string) => loadDocument(docId)}
-                onApiReady={onRegisterApi}
+                onApiReady={handleEditorApiReady}
                 ref={editorRef}
                 tabs={editorTabs}
                 setTabs={setTabsFromEditor}
                 activeTabId={activeTabId || ''}
                 setActiveTabId={(id: string) => setActiveTabId(id)}
+                isFocusMode={isFocusMode}
+                isTypewriterMode={isTypewriterMode}
                 initialContent={typeof activeTab.content === 'string' ? activeTab.content : (activeTab.content?.content ?? '')}
                 initialContentType={typeof activeTab.content === 'object' && activeTab.content?.contentType ? activeTab.content.contentType : undefined}
                 initialTitle={activeTab.title}

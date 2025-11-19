@@ -337,6 +337,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
             {activeMenu === 'ai' && (
               <>
                 <button 
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={onAIResearch} 
                   className={`px-3 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all hover:from-purple-600 hover:to-purple-700 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${isAiLoading ? 'animate-pulse' : ''}`} 
                   disabled={isAiLoading}
@@ -345,6 +346,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
                   연구
                 </button>
                 <button 
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={onAIAnalyze} 
                   className={`px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all hover:from-blue-600 hover:to-blue-700 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${isAiLoading ? 'animate-pulse' : ''}`} 
                   disabled={isAiLoading}
@@ -353,6 +355,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
                   분석
                 </button>
                 <button 
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={onAIPersonaFeedback} 
                   className={`px-3 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all hover:from-green-600 hover:to-green-700 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${isAiLoading ? 'animate-pulse' : ''}`} 
                   disabled={isAiLoading}
@@ -361,6 +364,7 @@ const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
                   피드백
                 </button>
                 <button 
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={onAIAnswer} 
                   className={`px-3 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all hover:from-orange-600 hover:to-orange-700 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${isAiLoading ? 'animate-pulse' : ''}`} 
                   disabled={isAiLoading}

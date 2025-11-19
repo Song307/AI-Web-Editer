@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import Workspace from './components/Workspace';
 import ClipboardPage from './components/ui/shared/ClipboardPage';
@@ -13,7 +13,12 @@ import Taskbar from './components/layout/Taskbar';
 import Menubar from './components/layout/Menubar';
 import { initDB } from './utils/db';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import LandingPage from './components/LandingPage';
+import LoginPage from './components/LoginPage';
+import Auth from './components/Auth';
+import { auth } from './firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import './App.css';
 
 function App() {
@@ -28,6 +33,8 @@ function App() {
 }
 
 function AppContent() {
+  const location = useLocation();
+  const isLoginPage = location.pathname === '/login';
   const [isMenubarHidden, setIsMenubarHidden] = useState(() => {
     const saved = localStorage.getItem('isMenubarHidden');
     return saved ? JSON.parse(saved) : false;
@@ -47,8 +54,19 @@ function AppContent() {
     return saved ? parseInt(saved) : 320;
   });
   const [isResizingRight, setIsResizingRight] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('isDarkMode');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [isFocusMode, setIsFocusMode] = useState(() => {
+    const saved = localStorage.getItem('isFocusMode');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  const [isTypewriterMode, setIsTypewriterMode] = useState(() => {
+    const saved = localStorage.getItem('isTypewriterMode');
     return saved ? JSON.parse(saved) : false;
   });
   const [language, setLanguage] = useState<'ko' | 'en'>(() => {
@@ -65,11 +83,49 @@ function AppContent() {
     replaceSelection?: (text: string) => void;
     highlightSelection?: (from: number, to: number) => void;
     clearHighlight?: () => void;
+    collapseSelection?: () => void;
+    focus?: (opts?: any) => void;
   } | null>(null);
+
+  // Tab API ref for focusing/opening tabs from Taskbar
+  const tabApiRef = React.useRef<{ setActiveTabByTitle?: (title: string) => void; setActiveTabId?: (id: string | null) => void } | null>(null);
+
+  const onRegisterTabApi = React.useCallback((api: typeof tabApiRef.current) => {
+    console.log('App: onRegisterTabApi called', api);
+    tabApiRef.current = api;
+  }, []);
+
+  const focusDocumentByName = React.useCallback((name: string | undefined | null) => {
+    if (!name) return;
+    try {
+      if (tabApiRef.current?.setActiveTabByTitle) {
+        tabApiRef.current.setActiveTabByTitle(name);
+      } else if (tabApiRef.current?.setActiveTabId) {
+        // no-op: cannot find by id from name
+      }
+    } catch (e) {
+      console.error('App: focusDocumentByName failed', e);
+    }
+  }, []);
+
+  // If Taskbar requests a replacement while the editor API isn't ready,
+  // store it here and apply when the API becomes available.
+  const pendingReplacementRef = React.useRef<string | null>(null);
 
   const onRegisterApi = React.useCallback((api: typeof workspaceApiRef.current) => {
     console.log('App: onRegisterApi called', api);
     workspaceApiRef.current = api;
+    // If there is a pending replacement request, apply it now.
+    if (pendingReplacementRef.current && workspaceApiRef.current?.replaceSelection) {
+      try {
+        workspaceApiRef.current.replaceSelection(pendingReplacementRef.current);
+        toast.success('대기 중이던 제안사항이 문서에 적용되었습니다.');
+      } catch (e) {
+        console.error('App: failed to apply pending replacement', e);
+        toast.error('대기 중이던 제안사항 적용에 실패했습니다.');
+      }
+      pendingReplacementRef.current = null;
+    }
   }, []);
 
   const onSelectionPreviewChange = React.useCallback((preview: string | null) => {
@@ -149,6 +205,15 @@ function AppContent() {
     localStorage.setItem('isDarkMode', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
 
+  // Save focus/typewriter preferences
+  useEffect(() => {
+    localStorage.setItem('isFocusMode', JSON.stringify(isFocusMode));
+  }, [isFocusMode]);
+
+  useEffect(() => {
+    localStorage.setItem('isTypewriterMode', JSON.stringify(isTypewriterMode));
+  }, [isTypewriterMode]);
+
   // Save language preference to localStorage
   useEffect(() => {
     localStorage.setItem('language', language);
@@ -167,6 +232,9 @@ function AppContent() {
     setIsCompactLayout(!isCompactLayout);
   };
 
+  const toggleFocusMode = () => setIsFocusMode((v: boolean) => !v);
+  const toggleTypewriterMode = () => setIsTypewriterMode((v: boolean) => !v);
+
   const clearSelection = () => {
     setSelectionPreview(null);
     setSelectionRange(null);
@@ -174,6 +242,16 @@ function AppContent() {
 
   const openTaskbar = () => {
     setIsRightSidebarOpen(true);
+    // After opening the taskbar, restore focus back to the editor so the
+    // browser doesn't clear the user's selection. Use a short timeout so the
+    // sidebar render completes first.
+    setTimeout(() => {
+      try {
+        workspaceApiRef.current?.focus?.();
+      } catch (e) {
+        console.warn('App: failed to restore editor focus after opening taskbar', e);
+      }
+    }, 0);
   };
 
   // 우측 사이드바 리사이저 핸들러
@@ -214,35 +292,50 @@ function AppContent() {
     };
   }, [isResizingRight]);
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   return (
     <div className={`flex h-screen bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 transition-colors ${isCompactLayout ? '' : 'p-4 gap-4'}`}>
       
-      {/* 좌측 메뉴바 */}
-      <Menubar 
-        isDarkMode={isDarkMode}
-        language={language}
-        isCompactLayout={isCompactLayout}
-        onHoverChange={setIsMenubarHoveredWhileHidden}
-        onVisibleChange={setIsMenubarVisible}
-      />
+      {/* 좌측 메뉴바 - 로그인 페이지에서는 숨김 */}
+      {!isLoginPage && (
+        <Menubar 
+          isDarkMode={isDarkMode}
+          language={language}
+          isCompactLayout={isCompactLayout}
+          user={user}
+          onHoverChange={setIsMenubarHoveredWhileHidden}
+          onVisibleChange={setIsMenubarVisible}
+        />
+      )}
       
-      {/* 우측 상단 고정 토글 버튼 */}
-      {!isRightSidebarOpen && (
-        <button
-          onClick={() => setIsRightSidebarOpen(true)}
-          className="fixed top-6 right-10 z-50 p-1 bg-transparent hover:bg-transparent transition-none"
-          title="AI 채팅 열기"
-          aria-label="Open AI chat"
-        >
-          <svg
-            className="w-6 h-6 text-gray-700 dark:text-gray-300"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      {/* 우측 상단 고정 토글 버튼 - Dashboard와 Workspace에서만 표시 */}
+      {!isLoginPage && !isRightSidebarOpen && (
+        (location.pathname === '/dashboard' || location.pathname.startsWith('/workspace') || location.pathname.startsWith('/documents')) && (
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={openTaskbar}
+            className="fixed top-6 right-10 z-50 p-1 bg-transparent hover:bg-transparent transition-none"
+            title="AI 채팅 열기"
+            aria-label="Open AI chat"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-        </button>
+            <svg
+              className="w-6 h-6 text-gray-700 dark:text-gray-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+          </button>
+        )
       )}
       
       {/* 메인 컨텐츠 영역 */}
@@ -250,7 +343,7 @@ function AppContent() {
         className="flex-1 flex flex-col overflow-hidden transition-all duration-300"
         style={{ 
           // When not compact layout we inset the menubar by 16px; account for that in main content margin
-          marginLeft: isMenubarVisible ? (isCompactLayout ? '80px' : '96px') : '0',
+          marginLeft: isLoginPage ? '0' : (isMenubarVisible ? (isCompactLayout ? '80px' : '96px') : '0'),
           marginRight: isRightSidebarOpen ? `${rightSidebarWidth}px` : '0',
           transition: 'margin 300ms ease-in-out'
         }}
@@ -260,16 +353,37 @@ function AppContent() {
           <div className={`h-full bg-white dark:bg-gray-900 overflow-hidden transition-shadow duration-300 ${isCompactLayout ? '' : 'rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/5 z-40'}`}>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard isDarkMode={isDarkMode} />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/dashboard" element={
+                loading ? (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+                    <div className="p-6 bg-white/90 dark:bg-gray-900/80 rounded-lg shadow-lg backdrop-blur-sm">
+                      <div className="w-64">
+                        <div className="h-1 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-green-400 to-blue-500 animate-stripes" style={{ width: '30%' }} />
+                        </div>
+                        <div className="mt-2 text-sm text-gray-700 dark:text-gray-300 text-center">로딩 중...</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : user ? (
+                  <Dashboard isDarkMode={isDarkMode} />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              } />
               <Route
                 path="/workspace"
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -280,10 +394,13 @@ function AppContent() {
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -294,10 +411,13 @@ function AppContent() {
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -308,10 +428,13 @@ function AppContent() {
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -322,10 +445,13 @@ function AppContent() {
                 element={
                   <Workspace
                     isDarkMode={isDarkMode}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
                     onSelectionPreviewChange={onSelectionPreviewChange}
                     onSelectionRangeChange={onSelectionRangeChange}
-                    onOpenTaskbar={() => setIsRightSidebarOpen(true)}
+                    onOpenTaskbar={openTaskbar}
                     onRegisterApi={onRegisterApi}
+                    onRegisterTabApi={onRegisterTabApi}
                     isRightSidebarOpen={isRightSidebarOpen}
                     rightSidebarWidth={rightSidebarWidth}
                   />
@@ -345,6 +471,10 @@ function AppContent() {
                     onToggleMenubar={() => setIsMenubarHidden(!isMenubarHidden)}
                     isCompactLayout={isMenubarHidden}
                     onToggleLayout={toggleLayout}
+                    isFocusMode={isFocusMode}
+                    isTypewriterMode={isTypewriterMode}
+                    onToggleFocusMode={toggleFocusMode}
+                    onToggleTypewriterMode={toggleTypewriterMode}
                   />
                 } 
               />
@@ -357,8 +487,9 @@ function AppContent() {
         </main>
       </div>
       
-      {/* 우측 사이드바 - 최상위 레벨 */}
-      <Taskbar
+      {/* 우측 사이드바 - 로그인 페이지에서는 숨김 */}
+      {!isLoginPage && (
+        <Taskbar
         isRightSidebarOpen={isRightSidebarOpen}
         rightSidebarWidth={rightSidebarWidth}
         isResizingRight={isResizingRight}
@@ -369,11 +500,19 @@ function AppContent() {
         selectionPreview={selectionPreview}
         selectionRange={selectionRange}
         onClearSelection={() => {
-          // Clear App-level selection state and also clear editor highlight if present
+          // Non-destructive clear: collapse editor selection and clear UI highlight
           console.log('App: onClearSelection called, workspaceApiRef =', workspaceApiRef.current);
-          console.log('App: Before clearSelection, selectionPreview =', selectionPreview);
+          try {
+            // Ask editor to collapse its selection (no deletion) if available
+            if (workspaceApiRef.current?.collapseSelection) {
+              workspaceApiRef.current.collapseSelection();
+              console.log('App: collapseSelection called on editor');
+            }
+          } catch (e) {
+            console.warn('App: collapseSelection call failed', e);
+          }
+          // Clear App-level preview state and editor highlight
           clearSelection();
-          console.log('App: After clearSelection, selectionPreview =', selectionPreview);
           try {
             workspaceApiRef.current?.clearHighlight?.();
             console.log('App: clearHighlight called successfully');
@@ -383,11 +522,20 @@ function AppContent() {
         }}
         onReplaceSelection={(newText: string) => {
           console.log('App: onReplaceSelection called, workspaceApiRef =', workspaceApiRef.current, 'newText=', newText);
-          // Ask the workspace/editor to replace the selected text
-          try {
-            workspaceApiRef.current?.replaceSelection?.(newText);
-          } catch (e) {
-            console.error('App: replaceSelection call failed', e);
+          // Ask the workspace/editor to replace the selected text. If the
+          // editor API is not yet available, queue the replacement and notify
+          // the user.
+          if (workspaceApiRef.current && workspaceApiRef.current.replaceSelection) {
+            try {
+              workspaceApiRef.current.replaceSelection(newText);
+            } catch (e) {
+              console.error('App: replaceSelection call failed', e);
+              toast.error('텍스트 적용에 실패했습니다. 콘솔을 확인하세요.');
+            }
+          } else {
+            console.warn('App: replaceSelection called but editor API not ready; queuing replacement');
+            pendingReplacementRef.current = newText;
+            toast('편집기가 준비되지 않았습니다. 열려있는 문서에 제안사항을 적용하면 자동으로 반영됩니다.');
           }
           // Clear selection state in App and hide highlight
           clearSelection();
@@ -408,7 +556,9 @@ function AppContent() {
         onClearHighlight={() => {
           workspaceApiRef.current?.clearHighlight?.();
         }}
+        onFocusDocument={(name: string | undefined | null) => focusDocumentByName(name)}
       />
+      )}
       <Toaster
         position="bottom-right"
         toastOptions={{

@@ -11,6 +11,8 @@ interface HeaderMenuProps {
   onExportFile?: () => void;
   onDuplicateFile?: () => void;
   onDeleteFile?: () => void;
+  onSummarize?: (length?: 'short' | 'medium' | 'long') => void;
+  onRewrite?: (tone?: string) => void;
   isDocumentListOpen?: boolean;
   onDocumentListToggle?: () => void;
 }
@@ -20,6 +22,8 @@ const HeaderMenu: React.FC<HeaderMenuProps> = ({
   leftSidebarTab,
   onSearchClick,
   onTocClick,
+  onSummarize = () => {},
+  onRewrite = () => {},
   onRenameFile = () => {},
   onExportFile = () => {},
   onDuplicateFile = () => {},
@@ -147,6 +151,17 @@ const HeaderMenu: React.FC<HeaderMenuProps> = ({
             </button>
             <span className="tooltip-text">도움말 - 구현예정</span>
           </div>
+
+          {/* 요약 버튼 */}
+          <div className="tooltip-container tooltip-top">
+            {/* 요약 버튼: 클릭시 길이 선택 메뉴 표시 */}
+            <SummaryButton onSummarize={onSummarize} />
+          </div>
+
+          {/* 리라이트/톤 변환 버튼 */}
+          <div className="tooltip-container tooltip-top">
+            <RewriteButton onRewrite={onRewrite} />
+          </div>
         </div>
       
         {/* 우측 - ... 메뉴 버튼 */}
@@ -206,6 +221,63 @@ const HeaderMenu: React.FC<HeaderMenuProps> = ({
     </div>
       
       {/* 문서 목록 사이드바는 이제 부모 컴포넌트에서 렌더링됨 */}
+    </div>
+  );
+};
+
+// 분리된 요약 버튼 컴포넌트 (길이 선택 메뉴 포함)
+const SummaryButton: React.FC<{ onSummarize?: (length?: 'short'|'medium'|'long') => void }> = ({ onSummarize }) => {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setOpen(s => !s)}
+        className="p-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 transition-all"
+        title="선택 영역 또는 문서 요약"
+      >
+        <Files size={18} />
+      </button>
+      <span className="tooltip-text">요약</span>
+      {open && (
+        <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
+          <button className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => { onSummarize && onSummarize('short'); setOpen(false); }}>짧게 (1-2문장)</button>
+          <button className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => { onSummarize && onSummarize('medium'); setOpen(false); }}>보통 (3-4문장)</button>
+          <button className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => { onSummarize && onSummarize('long'); setOpen(false); }}>자세히 (단락)</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 간단한 리라이트 버튼 (톤 선택 메뉴 포함)
+const RewriteButton: React.FC<{ onRewrite?: (tone?: string) => void }> = ({ onRewrite }) => {
+  const [open, setOpen] = React.useState(false);
+  const options = [
+    { key: 'business', label: '비즈니스(공식적)' },
+    { key: 'friendly', label: '친근한(캐주얼)' },
+    { key: 'concise', label: '간결하게' },
+    { key: 'expand', label: '자세히(확장)' },
+    { key: 'casual', label: '일상적(편한말)' },
+    { key: 'academic', label: '학술적' },
+  ];
+
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setOpen(s => !s)}
+        className="p-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 transition-all"
+        title="선택 영역 또는 문서 리라이트/톤 변환"
+      >
+        <Pencil size={18} />
+      </button>
+      <span className="tooltip-text">리라이트</span>
+      {open && (
+        <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
+          {options.map(o => (
+            <button key={o.key} className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => { onRewrite && onRewrite(o.key); setOpen(false); }}>{o.label}</button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

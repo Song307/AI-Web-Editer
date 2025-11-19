@@ -101,7 +101,7 @@ const EquationInputModal: React.FC<EquationInputModalProps> = ({
               onKeyDown={handleKeyDown}
               placeholder={isBlock ? "예: \\frac{a}{b} + \\sqrt{c}" : "예: x^2 + y^2 = z^2"}
               className="w-full h-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none"
-              autoFocus
+              
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               LaTeX 문법을 사용하세요. Ctrl+Enter로 삽입, ESC로 취소

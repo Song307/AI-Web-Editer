@@ -9,6 +9,10 @@ interface SettingsProps {
   onToggleLayout: () => void;
   isMenubarHidden?: boolean;
   onToggleMenubar?: () => void;
+  isFocusMode?: boolean;
+  isTypewriterMode?: boolean;
+  onToggleFocusMode?: () => void;
+  onToggleTypewriterMode?: () => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({
@@ -18,6 +22,10 @@ const Settings: React.FC<SettingsProps> = ({
   onLanguageChange,
   isCompactLayout,
   onToggleLayout,
+  isFocusMode = false,
+  isTypewriterMode = false,
+  onToggleFocusMode,
+  onToggleTypewriterMode,
 }) => {
   const texts = {
     ko: {
@@ -65,8 +73,40 @@ const Settings: React.FC<SettingsProps> = ({
                 : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 hover:border-indigo-500 hover:shadow-md hover:transform hover:-translate-y-0.5'
             }`}
           >
-            {isDarkMode ? '☀️ ' + t.lightMode : '🌙 ' + t.darkMode}
+            {isDarkMode ? '' + t.lightMode : '' + t.darkMode}
           </button>
+        </div>
+      </div>
+
+      <div className="mb-8 p-5 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+        <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">편집기 모드</h3>
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">포커스 모드와 타이프라이터 모드를 설정합니다.</p>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-medium text-gray-900 dark:text-gray-100">포커스 모드</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">현재 블록을 강조하고 나머지를 흐리게 표시합니다</div>
+            </div>
+            <button
+              onClick={onToggleFocusMode}
+              className={`px-4 py-2 rounded-xl font-medium transition-all ${isFocusMode ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white' : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100'}`}
+            >
+              {isFocusMode ? '켜짐' : '끔'}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-medium text-gray-900 dark:text-gray-100">타이프라이터 모드</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">커서가 항상 화면 세로 중앙에 위치하도록 스크롤합니다</div>
+            </div>
+            <button
+              onClick={onToggleTypewriterMode}
+              className={`px-4 py-2 rounded-xl font-medium transition-all ${isTypewriterMode ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white' : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100'}`}
+            >
+              {isTypewriterMode ? '켜짐' : '끔'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -82,7 +122,7 @@ const Settings: React.FC<SettingsProps> = ({
                 : 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white border-indigo-500 shadow-lg transform -translate-y-0.5'
             }`}
           >
-            {isCompactLayout ? '📐 ' + t.spacedLayout : '📦 ' + t.compactLayout}
+            {isCompactLayout ? '' + t.spacedLayout : '' + t.compactLayout}
           </button>
         </div>
       </div>
