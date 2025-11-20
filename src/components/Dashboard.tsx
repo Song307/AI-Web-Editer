@@ -1197,7 +1197,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isDarkMode }) => {
                 )}
               </div>
               <div className="space-y-1">
-                <h3 className="text-sm font-medium truncate">{folder.name}</h3>
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-blue-500 dark:group-hover:text-blue-400">{folder.name}</h3>
                 <p className="text-xs text-gray-500">{formatDate(folder.createdAt.toString())}</p>
               </div>
             </div>

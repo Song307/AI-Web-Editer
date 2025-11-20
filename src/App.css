@@ -560,6 +560,22 @@ body {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.05);
 }
 
+/* Ensure editor text is visible in dark mode (override any accidental color overrides) */
+[data-theme="dark"] .editor-content,
+[data-theme="dark"] .ProseMirror,
+[data-theme="dark"] .ProseMirror p,
+[data-theme="dark"] .ProseMirror h1,
+[data-theme="dark"] .ProseMirror h2,
+[data-theme="dark"] .ProseMirror h3,
+[data-theme="dark"] .ProseMirror pre,
+[data-theme="dark"] .ProseMirror code {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .editor-content {
+  background: var(--bg-primary) !important;
+}
+
 .ai-response {
   margin: 16px 24px;
   padding: 16px;
