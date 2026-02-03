@@ -24,7 +24,7 @@
 - **지능형 에디터**: 단순 타이핑을 넘어 AI와 협업하는 새로운 저작 환경을 제시합니다.
 
 ## 4. 시스템 아키텍처 (System Architecture)
-![시스템 아키텍처](public/images/readmeImg/시스템 아키텍처.png)
+![시스템 아키텍처](public/images/readmeImg/시스템%20아키텍처.png)
 
 ### Tech Stack
 - **Frontend**: React, TypeScript, Vite
@@ -43,10 +43,12 @@ Google의 생성형 AI 모델을 연동하여, 사용자의 입력을 바탕으�
 Tiptap 기반의 에디터를 통해 코드 블록, 표, 이미지 삽입, 할 일 목록(Task List) 등 복잡한 서식을 손쉽게 적용할 수 있습니다.
 
 ## 6. 시연 영상 (Demo)
-[![Toolix 시연 영상](https://img.youtube.com/vi/nmWHSRgdywg/0.jpg)](https://www.youtube.com/watch?v=nmWHSRgdywg)
+<a href="https://www.youtube.com/watch?v=nmWHSRgdywg" target="_blank">
+  <img src="https://img.youtube.com/vi/nmWHSRgdywg/0.jpg" alt="Toolix 시연 영상" width="100%" />
+</a>
 
 ## 7. 유사 서비스 비교 (Comparison)
-![유사서비스 비교](public/images/readmeImg/유사서비스 비교.png)
+![유사서비스 비교](public/images/readmeImg/유사서비스%20비교.png)
 
 기존의 일반적인 텍스트 에디터나 경쟁 서비스들과 비교하여, Toolix는 **AI 자동 생성** 기능이 강력하게 통합된 차세대 저작 도구로서의 차별성을 가집니다.
 
